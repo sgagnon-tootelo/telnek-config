@@ -1,4 +1,5 @@
 import streamlit as st
+import json
 from supabase import create_client, Client
 
 # Connexion à Supabase via secrets
@@ -44,29 +45,59 @@ else:
         company_hours = st.text_input("Heures ouverture", value=selected_client.get('company_hours', ''))
         admin_phone = st.text_input("Numéro de téléphone pour recevoir les messages textes (SMS)", value=selected_client.get('admin_phone', ''))
         callee_number = st.text_input("Numéro de l'agent virtuel", value=selected_client.get('callee_number', ''))
-        instructions_specific = st.text_area("Instructions spécific de l'entreprise", value=selected_client.get('instructions_specific', ''))
+        instructions_specific = st.text_area("Instructions spécifiques de l'entreprise", value=selected_client.get('instructions_specific', ''))
         base_url = st.text_input("Site Web de l'entreprise", value=selected_client.get('base_url', ''))
-        url_map = st.text_area("Sujets associés sur le site Web", value=selected_client.get('url_map', ''))
-        # Exemple pour d'autres champs : company_email = st.text_input("Email", value=selected_client.get('company_email', ''))
+        
+        # Gestion spéciale pour url_map (JSON)
+        url_map_json = selected_client.get('url_map', {})  # Récupère comme dict (ou vide si None)
+        # Convertit en string prettified pour édition
+        url_map_str = json.dumps(url_map_json, indent=4, ensure_ascii=False) if url_map_json else '{}'
+        
+        #st.subheader("Sujets associés sur le site Web (format JSON)")
+        #st.markdown("Exemple : \n```json\n{\n    \"accueil\": \"/\",\n    \"services\": \"/services\",\n    \"contact\": \"/nous-joindre\"\n}\n```")
+        
+        url_map_edited = st.text_area(
+            "Sujets associés sur le site Web (format JSON)", 
+            value=url_map_str, 
+            height=200,  # Hauteur plus grande pour confort
+            placeholder='{"accueil": "/", "services": "/services"}'
+        )
+        
+        # Bouton optionnel pour valider le JSON en live
+        if st.button("Valider le JSON (optionnel)"):
+            try:
+                json.loads(url_map_edited)
+                st.success("JSON valide !")
+                st.json(json.loads(url_map_edited), expanded=True)  # Preview interactif
+            except json.JSONDecodeError as e:
+                st.error(f"JSON invalide : {e}")
         
         # Bouton pour sauvegarder
         if st.button("Sauvegarder les modifications"):
+            # Valider et parser url_map en JSON natif
+            try:
+                url_map_parsed = json.loads(url_map_edited) if url_map_edited.strip() else {}
+            except json.JSONDecodeError as e:
+                st.error(f"Impossible de sauvegarder : JSON invalide pour url_map. Erreur : {e}")
+                st.stop()
+
             # Préparer les données à updater
             updated_data = {
                 'company_name': company_name,
                 'company_address': company_address,
                 'company_hours': company_hours,
                 'admin_phone': admin_phone,
+                'callee_number': callee_number,
                 'instructions_specific': instructions_specific,
                 'base_url': base_url,
-                'url_map': url_map
-                # Ajoute d'autres champs ici : 'company_email': company_email,
+                'url_map': url_map_parsed  # Envoie comme dict JSON natif !
+                # Ajoute d'autres champs ici si besoin
             }
             
             # Mettre à jour dans Supabase
             update_response = update_client(selected_client_id, updated_data)
             
             if update_response.data:
-                st.success("Modifications sauvegardées avec succès !")
+                st.success("Modifications sauvegardées avec succès ! Le champ url_map est bien stocké comme JSON.")
             else:
-                st.error("Erreur lors de la sauvegarde. Vérifiez les logs ou les permissions.")
+                st.error("Erreur lors de la sauvegarde. Vérifiez les logs Supabase ou les permissions (RLS ?).")
