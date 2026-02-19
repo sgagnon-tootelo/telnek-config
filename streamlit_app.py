@@ -17,7 +17,7 @@ def update_client(client_id, data):
     return response
 
 # Interface Streamlit
-st.title("Telnek Agent Virtue")
+st.title("Telnek AI Agent Virtue")
 
 # Récupérer la liste des clients
 clients = get_clients()
@@ -57,7 +57,6 @@ else:
                 'company_address': company_address,
                 'company_hours': company_hours,
                 'admin_phone': admin_phone,
-                'callee_number': callee_number,
                 'instructions_specific': instructions_specific,
                 'base_url': base_url,
                 'url_map': url_map
