@@ -18,7 +18,7 @@ def update_client(client_id, data):
     return response
 
 # Interface Streamlit
-st.title("Telnek AI Agent Virtue")
+st.title("Telnek AI Agent Virtuel")
 
 # Récupérer la liste des clients
 clients = get_clients()
