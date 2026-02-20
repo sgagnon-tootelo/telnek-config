@@ -75,20 +75,32 @@ else:
         
         agent_name = st.text_input("Nom de l'agent", value=selected_client.get('agent_name', ''))
         
-        # Liste des voix disponibles (minuscules, comme attendu par l'API)
-        available_voices = ["ara", "eve", "leo", "rex", "sal"]
+        voice_options = [
+            {"value": "ara", "label": "Ara – Féminine, chaleureuse, amicale (défaut)"},
+            {"value": "eve", "label": "Eve – Féminine, énergique, enthousiaste"},
+            {"value": "leo", "label": "Leo – Masculin, autoritaire, confiant"},
+            {"value": "rex", "label": "Rex – Masculin, professionnel, clair"},
+            {"value": "sal", "label": "Sal – Neutre, équilibré, polyvalent"}
+        ]
 
-        # Valeur actuelle (ou "ara" par défaut si vide ou invalide)
+        # Valeur actuelle
         current_voice = selected_client.get('voice_name', 'ara').lower().strip()
-        if current_voice not in available_voices:
-            current_voice = "ara"  # fallback safe
 
-        voice_name = st.selectbox(
-            "Nom de la voix de l'agent",
-            options=available_voices,
-            index=available_voices.index(current_voice),  # sélectionne la valeur actuelle
-            help="Choisissez une voix parmi les options officielles Grok Voice Agent API.\nAra est la voix par défaut (chaleureuse et naturelle)."
+        # Trouver l'index correspondant
+        default_index = 0
+        for i, opt in enumerate(voice_options):
+            if opt["value"] == current_voice:
+                default_index = i
+                break
+
+        selected_option = st.selectbox(
+            "Voix de l'agent virtuel",
+            options=voice_options,
+            format_func=lambda x: x["label"],          # affiche le label descriptif
+            index=default_index
         )
+
+        voice_name = selected_option["value"]           # on récupère seulement la valeur technique ("ara", etc.)
 
         # Bouton pour sauvegarder
         if st.button("Sauvegarder les modifications"):
