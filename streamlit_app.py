@@ -28,7 +28,8 @@ if not clients:
 else:
     st.subheader("Configuration des Clients")
     # Créer une liste des noms de clients pour le selectbox (avec ID associé)
-    client_options = {client['company_name']: client['id'] for client in clients}
+    clients_sorted = sorted(clients, key=lambda c: c['company_name'].lower())
+    client_options = {client['company_name']: client['id'] for client in clients_sorted}
     selected_client_name = st.selectbox("Sélectionnez un client existant :", list(client_options.keys()))
     
     if selected_client_name:
@@ -44,7 +45,7 @@ else:
         company_address = st.text_input("Adresse de l'entreprise", value=selected_client.get('company_address', ''))
         company_hours = st.text_input("Heures ouverture", value=selected_client.get('company_hours', ''))
         admin_phone = st.text_input("Numéro de téléphone pour recevoir les messages textes (SMS)", value=selected_client.get('admin_phone', ''))
-        callee_number = st.text_input("Numéro de l'agent virtuel", value=selected_client.get('callee_number', ''))
+        callee_number = st.text_input("Numéro de l'agent virtuel", value=selected_client.get('callee_number', ''), disabled=True, help="Ce numéro est configuré au niveau Twilio et ne peut pas être modifié ici.")
         instructions_specific = st.text_area("Instructions spécifiques de l'entreprise", value=selected_client.get('instructions_specific', ''))
         base_url = st.text_input("Site Web de l'entreprise", value=selected_client.get('base_url', ''))
         
@@ -72,6 +73,23 @@ else:
             except json.JSONDecodeError as e:
                 st.error(f"JSON invalide : {e}")
         
+        agent_name = st.text_input("Nom de l'agent", value=selected_client.get('agent_name', ''))
+        
+        # Liste des voix disponibles (minuscules, comme attendu par l'API)
+        available_voices = ["ara", "eve", "leo", "rex", "sal"]
+
+        # Valeur actuelle (ou "ara" par défaut si vide ou invalide)
+        current_voice = selected_client.get('voice_name', 'ara').lower().strip()
+        if current_voice not in available_voices:
+            current_voice = "ara"  # fallback safe
+
+        voice_name = st.selectbox(
+            "Nom de la voix de l'agent",
+            options=available_voices,
+            index=available_voices.index(current_voice),  # sélectionne la valeur actuelle
+            help="Choisissez une voix parmi les options officielles Grok Voice Agent API.\nAra est la voix par défaut (chaleureuse et naturelle)."
+        )
+
         # Bouton pour sauvegarder
         if st.button("Sauvegarder les modifications"):
             # Valider et parser url_map en JSON natif
@@ -90,7 +108,9 @@ else:
                 'callee_number': callee_number,
                 'instructions_specific': instructions_specific,
                 'base_url': base_url,
-                'url_map': url_map_parsed  # Envoie comme dict JSON natif !
+                'url_map': url_map_parsed,  # Envoie comme dict JSON natif !
+                'agent_name': agent_name,
+                'voice_name': voice_name
                 # Ajoute d'autres champs ici si besoin
             }
             
