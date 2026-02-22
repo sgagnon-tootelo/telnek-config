@@ -102,13 +102,49 @@ else:
 
         voice_name = selected_option["value"]           # on récupère seulement la valeur technique ("ara", etc.)
 
+        # === TRANSFER_NUMBERS (dictionnaire département → numéro de téléphone) ===
+        st.subheader("Numéros de transfert")
+        st.markdown("""
+            Format JSON attendu :  
+            ```json
+            {
+                "comptabilité": "+15149474976",
+                "technique": "+15145551234",
+                "propriétaire": "+14381234567"
+            }
+        """)
+
+        transfer_numbers_json = selected_client.get('transfer_numbers', {}) or {}
+        transfer_numbers_str = json.dumps(transfer_numbers_json, indent=4, ensure_ascii=False)
+        transfer_numbers_edited = st.text_area(
+            "Numéros de transfert (JSON)",
+            value=transfer_numbers_str,
+            height=180,
+            placeholder='{\n    "comptabilité": "+15149474976",\n    "technique": "+15145551234"\n}'
+        )
+
+        if st.button("Valider le JSON des transferts"):
+            try:
+                json.loads(transfer_numbers_edited)
+                st.success("✅ JSON des transferts valide !")
+                st.json(json.loads(transfer_numbers_edited))
+            except json.JSONDecodeError as e:
+                st.error(f"❌ JSON invalide : {e}")
+
         # Bouton pour sauvegarder
         if st.button("Sauvegarder les modifications"):
-            # Valider et parser url_map en JSON natif
+            # Valider et parser url_map
             try:
                 url_map_parsed = json.loads(url_map_edited) if url_map_edited.strip() else {}
             except json.JSONDecodeError as e:
                 st.error(f"Impossible de sauvegarder : JSON invalide pour url_map. Erreur : {e}")
+                st.stop()
+
+            # Valider et parser transfer_numbers
+            try:
+                transfer_numbers_parsed = json.loads(transfer_numbers_edited) if transfer_numbers_edited.strip() else {}
+            except json.JSONDecodeError as e:
+                st.error(f"Impossible de sauvegarder : JSON invalide pour transfer_numbers. Erreur : {e}")
                 st.stop()
 
             # Préparer les données à updater
@@ -120,16 +156,16 @@ else:
                 'callee_number': callee_number,
                 'instructions_specific': instructions_specific,
                 'base_url': base_url,
-                'url_map': url_map_parsed,  # Envoie comme dict JSON natif !
+                'url_map': url_map_parsed,
                 'agent_name': agent_name,
-                'voice_name': voice_name
-                # Ajoute d'autres champs ici si besoin
+                'voice_name': voice_name,
+                'transfer_numbers': transfer_numbers_parsed   # ← AJOUT ICI
             }
             
             # Mettre à jour dans Supabase
             update_response = update_client(selected_client_id, updated_data)
             
             if update_response.data:
-                st.success("Modifications sauvegardées avec succès ! Le champ url_map est bien stocké comme JSON.")
+                st.success("✅ Modifications sauvegardées avec succès ! (transfer_numbers inclus)")
             else:
-                st.error("Erreur lors de la sauvegarde. Vérifiez les logs Supabase ou les permissions (RLS ?).")
+                st.error("Erreur lors de la sauvegarde. Vérifiez les logs ou les permissions RLS.")
