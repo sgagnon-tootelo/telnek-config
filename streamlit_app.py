@@ -102,34 +102,67 @@ else:
 
         voice_name = selected_option["value"]           # on récupère seulement la valeur technique ("ara", etc.)
 
-        # === TRANSFER_NUMBERS (dictionnaire département → numéro de téléphone) ===
-        st.subheader("Numéros de transfert")
-        st.markdown("""
-            Format JSON attendu :  
-            ```json
-            {
-                "comptabilité": "+15149474976",
-                "technique": "+15145551234",
-                "propriétaire": "+14381234567"
-            }
-        """)
+        # === TRANSFER_MODE ===
+        st.subheader("Comportement en cas de demande de transfert")
 
-        transfer_numbers_json = selected_client.get('transfer_numbers', {}) or {}
-        transfer_numbers_str = json.dumps(transfer_numbers_json, indent=4, ensure_ascii=False)
-        transfer_numbers_edited = st.text_area(
-            "Numéros de transfert (JSON)",
-            value=transfer_numbers_str,
-            height=180,
-            placeholder='{\n    "comptabilité": "+15149474976",\n    "technique": "+15145551234"\n}'
+        transfer_mode_options = [
+            {"value": "blind", "label": "Blind – Transfert immédiat (sans supervision)"},
+            {"value": "warm",  "label": "Warm  – Transfert supervisé (Amélie parle d'abord)"},
+            {"value": "none",  "label": "None  – Aucun transfert – toujours prise de message"},
+        ]
+
+        # Valeur actuelle (minuscule et nettoyée)
+        current_mode = selected_client.get('transfer_mode', 'none').lower().strip()
+
+        # Trouver l'index correspondant
+        default_mode_index = 2  # 'none' par défaut si valeur inconnue
+        for i, opt in enumerate(transfer_mode_options):
+            if opt["value"] == current_mode:
+                default_mode_index = i
+                break
+
+        selected_mode_option = st.selectbox(
+            "Mode de transfert",
+            options=transfer_mode_options,
+            format_func=lambda x: x["label"],
+            index=default_mode_index,
+            help="Détermine si l'agent virtuel peut transférer l'appel ou doit obligatoirement prendre un message."
         )
 
-        if st.button("Valider le JSON des transferts"):
-            try:
-                json.loads(transfer_numbers_edited)
-                st.success("✅ JSON des transferts valide !")
-                st.json(json.loads(transfer_numbers_edited))
-            except json.JSONDecodeError as e:
-                st.error(f"❌ JSON invalide : {e}")
+        transfer_mode_selected = selected_mode_option["value"]
+
+        if transfer_mode_selected == "none":
+            st.info("Le mode « none » est sélectionné → aucun transfert n’est possible. Les numéros de transfert ne seront pas utilisés.")
+            # On ne montre PAS la section
+        else:
+            # === TRANSFER_NUMBERS (dictionnaire département → numéro de téléphone) ===
+            st.subheader("Numéros de transfert")
+            st.markdown("""
+                Format JSON attendu :  
+                ```json
+                {
+                    "comptabilité": "+15149474976",
+                    "technique": "+15145551234",
+                    "propriétaire": "+14381234567"
+                }
+            """)
+
+            transfer_numbers_json = selected_client.get('transfer_numbers', {}) or {}
+            transfer_numbers_str = json.dumps(transfer_numbers_json, indent=4, ensure_ascii=False)
+            transfer_numbers_edited = st.text_area(
+                "Numéros de transfert (JSON)",
+                value=transfer_numbers_str,
+                height=180,
+                placeholder='{\n    "comptabilité": "+15149474976",\n    "technique": "+15145551234"\n}'
+            )
+
+            if st.button("Valider le JSON des transferts"):
+                try:
+                    json.loads(transfer_numbers_edited)
+                    st.success("✅ JSON des transferts valide !")
+                    st.json(json.loads(transfer_numbers_edited))
+                except json.JSONDecodeError as e:
+                    st.error(f"❌ JSON invalide : {e}")
 
         # Bouton pour sauvegarder
         if st.button("Sauvegarder les modifications"):
@@ -159,7 +192,8 @@ else:
                 'url_map': url_map_parsed,
                 'agent_name': agent_name,
                 'voice_name': voice_name,
-                'transfer_numbers': transfer_numbers_parsed   # ← AJOUT ICI
+                'transfer_numbers': transfer_numbers_parsed,
+                'transfer_mode': transfer_mode_selected,
             }
             
             # Mettre à jour dans Supabase
