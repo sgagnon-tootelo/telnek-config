@@ -195,7 +195,7 @@ else:
                 display_columns = [
                     'call_date', 'call_time', 'caller_number', 'formatted_caller',
                     'status_label', 'duration_formatted', 'transfer_status', 
-                    'message_status', 'transfer_to_number', 'transfer_department', 
+                    'message_status', 'transfer_to_number', 'transfer_client_name', 'transfer_department', 
                     'message_reason', 'message_name', 'message_number'
                 ]
                 
