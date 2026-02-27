@@ -27,14 +27,13 @@ clients = get_clients()
 if not clients:
     st.warning("Aucun client trouvé dans la base de données.")
 else:
-    st.subheader("Sélection du Client")
+    st.subheader("Sélection du Client Id")
     # Créer une liste des noms de clients pour le selectbox
-    clients_sorted = sorted(clients, key=lambda c: c['company_name'].lower())
-    client_options = {client['company_name']: client['id'] for client in clients_sorted}
-    selected_client_name = st.selectbox("Sélectionnez un client existant :", list(client_options.keys()))
+    clients_sorted = sorted(clients, key=lambda c: c['id'].lower())
+    client_options = {client['id']: client['id'] for client in clients_sorted}
+    selected_client_id = st.selectbox("Sélectionnez un client id existant :", list(client_options.keys()), help="Ce client id est le préfix de la room LiveKit et ne peux pas être modifié")
     
-    if selected_client_name:
-        selected_client_id = client_options[selected_client_name]
+    if selected_client_id:
         selected_client = next((client for client in clients if client['id'] == selected_client_id), None)
         
         # === TABS ===
@@ -44,9 +43,11 @@ else:
             "📊 Statistiques"
         ])
 
+        selected_client_id = client_options[selected_client_id]
+
         # ====================== TAB CONFIGURATION ======================
         with tab_config:
-            st.subheader(f"Paramètres pour {selected_client_name}")
+            st.subheader(f"Paramètres pour {selected_client_id}")
             
             # Champs éditables (identiques à ton code original)
             company_name = st.text_input("Nom de l'entreprise", value=selected_client.get('company_name', ''))
@@ -180,7 +181,7 @@ else:
 
         # ====================== TAB HISTORIQUE DES APPELS ======================
         with tab_appels:
-            st.subheader(f"📞 Historique des appels – {selected_client_name}")
+            st.subheader(f"📞 Historique des appels – {selected_client_id}")
             
             appels_response = supabase.table('vw_appels_clients') \
                 .select('*') \
@@ -210,7 +211,7 @@ else:
                 st.download_button(
                     "📥 Télécharger en CSV",
                     csv,
-                    f"appels_{selected_client_name.replace(' ', '_')}.csv",
+                    f"appels_{selected_client_id.replace(' ', '_')}.csv",
                     "text/csv"
                 )
             else:
@@ -218,7 +219,7 @@ else:
 
         # ====================== TAB STATISTIQUES ======================
         with tab_stats:
-            st.subheader(f"📊 Statistiques – {selected_client_name}")
+            st.subheader(f"📊 Statistiques – {selected_client_id}")
             
             stats_response = supabase.table('vw_stats_appels_clients') \
                 .select('*') \
