@@ -113,6 +113,8 @@ else:
                 index=default_mode_index,
                 help="Détermine si l'agent virtuel peut transférer l'appel ou doit obligatoirement prendre un message."
             )
+            st.info("💡 Quand vous passez en mode « None », les numéros de transfert sont conservés automatiquement. Ils réapparaîtront dès que vous repasserez en Warm ou Blind.")
+            
             transfer_mode_selected = selected_mode_option["value"]
 
             # Transfer numbers (seulement si mode != none)
@@ -148,13 +150,16 @@ else:
                     st.error(f"JSON invalide pour url_map : {e}")
                     st.stop()
 
-                transfer_numbers_parsed = {}
-                if transfer_mode_selected != "none" and 'transfer_numbers_edited' in locals():
+                # === NOUVEAU : On conserve les numéros existants si mode "none" ===
+                if transfer_mode_selected != "none":
                     try:
                         transfer_numbers_parsed = json.loads(transfer_numbers_edited) if transfer_numbers_edited.strip() else {}
                     except json.JSONDecodeError as e:
                         st.error(f"JSON invalide pour transfer_numbers : {e}")
                         st.stop()
+                else:
+                    # Mode "none" → on garde les anciens numéros (on ne les écrase pas)
+                    transfer_numbers_parsed = selected_client.get('transfer_numbers', {}) or {}
 
                 updated_data = {
                     'company_name': company_name,
