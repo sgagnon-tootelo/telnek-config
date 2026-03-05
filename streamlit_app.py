@@ -2,6 +2,8 @@ import streamlit as st
 import json
 import pandas as pd
 from supabase import create_client, Client
+from datetime import datetime
+import pytz  # ← pour le fuseau Montréal
 
 # ==================== CONNEXION SUPABASE ====================
 supabase_url = st.secrets["SUPABASE_URL"]
@@ -32,7 +34,6 @@ selected_client_id = st.selectbox("Sélectionnez un client", list(client_options
 if selected_client_id:
     client = next(c for c in clients if c['id'] == selected_client_id)
 
-    # ====================== 3 TABS COMME AVANT ======================
     tab_config, tab_appels, tab_stats = st.tabs([
         "⚙️ Configuration", 
         "📞 Historique des appels", 
@@ -47,7 +48,6 @@ if selected_client_id:
         company_address = st.text_input("Adresse de l'entreprise", value=client.get('company_address', ''))
         company_hours = st.text_input("Heures d'ouverture (texte affiché)", value=client.get('company_hours', ''))
         
-        # === HORAIRES NUMÉRIQUES ===
         col1, col2 = st.columns(2)
         with col1:
             opening_hour = st.number_input("🕒 Heure d'ouverture (0-23)", 
@@ -104,7 +104,6 @@ if selected_client_id:
                                      format_func=lambda x: x["label"], index=default_mode_index)
         transfer_mode_selected = selected_mode["value"]
 
-        # Transfer numbers avec validation
         if transfer_mode_selected != "none":
             st.subheader("Numéros de transfert")
             transfer_numbers_str = json.dumps(client.get('transfer_numbers', {}) or {}, indent=4, ensure_ascii=False)
@@ -118,7 +117,6 @@ if selected_client_id:
                 except json.JSONDecodeError as e:
                     st.error(f"❌ JSON invalide : {e}")
 
-        # ====================== BOUTON SAUVEGARDER ======================
         if st.button("💾 Sauvegarder la configuration", type="primary"):
             try:
                 url_map_parsed = json.loads(url_map_edited) if url_map_edited.strip() else {}
@@ -151,12 +149,11 @@ if selected_client_id:
                 'transfer_mode': transfer_mode_selected,
                 'transfer_numbers': transfer_numbers_parsed
             }
-            
             update_client(selected_client_id, updated_data)
             st.success("✅ Configuration sauvegardée avec succès !")
             st.rerun()
 
-    # ====================== TAB HISTORIQUE DES APPELS ======================
+    # ====================== TAB HISTORIQUE DES APPELS (HEURES MONTRÉAL + COLONNES PROPRES) ======================
     with tab_appels:
         st.subheader(f"📞 Historique des appels – {selected_client_id}")
         appels_response = supabase.table('vw_appels_clients') \
@@ -168,7 +165,36 @@ if selected_client_id:
         
         if appels_response.data:
             df = pd.DataFrame(appels_response.data)
-            st.dataframe(df, use_container_width=True, hide_index=True)
+            
+            # === CONVERSION FUSEAU MONTRÉAL ===
+            tz_montreal = pytz.timezone('America/Montreal')
+            for col in ['started_at', 'ended_at']:
+                if col in df.columns:
+                    df[col] = pd.to_datetime(df[col])
+                    if df[col].dt.tz is None:
+                        df[col] = df[col].dt.tz_localize('UTC')
+                    df[col] = df[col].dt.tz_convert(tz_montreal)
+            
+            # Colonnes lisibles
+            if 'started_at' in df.columns:
+                df['call_date'] = df['started_at'].dt.date
+                df['call_time'] = df['started_at'].dt.strftime('%H:%M')
+            
+            # === AFFICHAGE PROPRE (seulement les colonnes utiles) ===
+            display_columns = [
+                'call_date', 'call_time', 'caller_number',
+                'status_label', 'duration_formatted', 'transfer_status', 
+                'message_status', 'transfer_to_number', 'transfer_client_name', 
+                'transfer_department', 'message_reason', 'message_name', 'message_number'
+            ]
+            available_cols = [col for col in display_columns if col in df.columns]
+            
+            st.dataframe(
+                df[available_cols],
+                use_container_width=True,
+                hide_index=True
+            )
+            
             csv = df.to_csv(index=False).encode('utf-8')
             st.download_button("📥 Télécharger en CSV", csv, 
                              f"appels_{selected_client_id}.csv", "text/csv")
