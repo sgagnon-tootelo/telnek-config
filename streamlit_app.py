@@ -4,11 +4,16 @@ import pandas as pd
 from supabase import create_client, Client
 from datetime import datetime
 import pytz  # ← pour le fuseau Montréal
+from google_auth_oauthlib.flow import InstalledAppFlow
+import webbrowser
 
 # ==================== CONNEXION SUPABASE ====================
 supabase_url = st.secrets["SUPABASE_URL"]
 supabase_key = st.secrets["SUPABASE_KEY"]
 supabase: Client = create_client(supabase_url, supabase_key)
+
+GOOGLE_CLIENT_ID = st.secrets.get("GOOGLE_CLIENT_ID")
+GOOGLE_CLIENT_SECRET = st.secrets.get("GOOGLE_CLIENT_SECRET")
 
 # ==================== FONCTIONS HELPER ====================
 def get_clients():
@@ -116,6 +121,34 @@ if selected_client_id:
                     st.json(json.loads(transfer_numbers_edited))
                 except json.JSONDecodeError as e:
                     st.error(f"❌ JSON invalide : {e}")
+
+        # ====================== GOOGLE CALENDAR - VERSION FINALE (Desktop + run_local_server) ======================
+        st.subheader("📅 Connexion Google Calendar")
+        
+        if st.button("🔗 Connecter le calendrier Google de ce client", type="primary"):
+            SCOPES = ['https://www.googleapis.com/auth/calendar']
+            
+            flow = InstalledAppFlow.from_client_secrets_file(
+                "client_secrets.json", 
+                scopes=SCOPES
+            )
+            
+            credentials = flow.run_local_server(
+                port=8502,
+                prompt='consent',
+                authorization_prompt_message="Veuillez autoriser Amélie à accéder à votre calendrier"
+            )
+            
+            if credentials and credentials.refresh_token:
+                supabase.table("clients").update({
+                    "google_refresh_token": credentials.refresh_token
+                }).eq("id", selected_client_id).execute()
+                
+                st.success("🎉 Calendrier Google connecté avec succès ! Le refresh_token est sauvegardé dans Supabase.")
+                st.rerun()
+            else:
+                st.error("Aucun refresh_token reçu. Réessaie.")
+                                                                
 
         if st.button("💾 Sauvegarder la configuration", type="primary"):
             try:
