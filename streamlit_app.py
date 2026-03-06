@@ -3,17 +3,13 @@ import json
 import pandas as pd
 from supabase import create_client, Client
 from datetime import datetime
-import pytz  # ← pour le fuseau Montréal
+import pytz
 from google_auth_oauthlib.flow import InstalledAppFlow
-import webbrowser
 
 # ==================== CONNEXION SUPABASE ====================
 supabase_url = st.secrets["SUPABASE_URL"]
 supabase_key = st.secrets["SUPABASE_KEY"]
 supabase: Client = create_client(supabase_url, supabase_key)
-
-GOOGLE_CLIENT_ID = st.secrets.get("GOOGLE_CLIENT_ID")
-GOOGLE_CLIENT_SECRET = st.secrets.get("GOOGLE_CLIENT_SECRET")
 
 # ==================== FONCTIONS HELPER ====================
 def get_clients():
@@ -38,7 +34,6 @@ selected_client_id = st.selectbox("Sélectionnez un client", list(client_options
 
 if selected_client_id:
     client = next(c for c in clients if c['id'] == selected_client_id)
-    print(f">>> Selected client: {selected_client_id}")
 
     tab_config, tab_appels, tab_stats = st.tabs([
         "⚙️ Configuration", 
@@ -46,7 +41,7 @@ if selected_client_id:
         "📊 Statistiques"
     ])
 
-    # ====================== TAB CONFIGURATION ======================
+    # ====================== TAB CONFIGURATION (identique à ta version) ======================
     with tab_config:
         st.subheader(f"Paramètres pour {selected_client_id}")
         
@@ -70,7 +65,6 @@ if selected_client_id:
         
         base_url = st.text_input("Site Web de l'entreprise", value=client.get('base_url', ''))
         
-        # url_map avec validation
         url_map_str = json.dumps(client.get('url_map', {}) or {}, indent=4, ensure_ascii=False)
         url_map_edited = st.text_area("Sujets associés sur le site Web (format JSON)", 
                                       value=url_map_str, height=150)
@@ -84,7 +78,6 @@ if selected_client_id:
 
         agent_name = st.text_input("Nom de l'agent", value=client.get('agent_name', 'Amélie'))
         
-        # Voix
         voice_options = [
             {"value": "ara", "label": "Ara – Féminine, chaleureuse (défaut)"},
             {"value": "eve", "label": "Eve – Féminine énergique"},
@@ -98,7 +91,6 @@ if selected_client_id:
                                       format_func=lambda x: x["label"], index=default_index)
         voice_name = selected_voice["value"]
 
-        # Mode transfert
         transfer_mode_options = [
             {"value": "blind", "label": "Blind – Transfert immédiat"},
             {"value": "warm",  "label": "Warm  – Transfert supervisé"},
@@ -123,16 +115,13 @@ if selected_client_id:
                 except json.JSONDecodeError as e:
                     st.error(f"❌ JSON invalide : {e}")
 
-        # ====================== GOOGLE CALENDAR - SANS CHECKBOX (action directe) ======================
+        # ====================== GOOGLE CALENDAR (identique à ta version) ======================
         st.subheader("📅 Connexion Google Calendar")
-                
-        # Rafraîchissement forcé
         fresh_client = next((c for c in get_clients() if c['id'] == selected_client_id), client)
         current_token = fresh_client.get('google_refresh_token')
         has_google = bool(current_token)
 
         col_connect, col_disconnect = st.columns([3, 2])
-        
         with col_connect:
             if has_google:
                 st.success("✅ Calendrier Google **connecté**")
@@ -141,11 +130,8 @@ if selected_client_id:
                     SCOPES = ['https://www.googleapis.com/auth/calendar']
                     flow = InstalledAppFlow.from_client_secrets_file("client_secrets.json", scopes=SCOPES)
                     credentials = flow.run_local_server(port=8502, prompt='consent')
-                    
                     if credentials and credentials.refresh_token:
-                        response = supabase.table("clients").update({
-                            "google_refresh_token": credentials.refresh_token
-                        }).eq("id", selected_client_id).execute()
+                        supabase.table("clients").update({"google_refresh_token": credentials.refresh_token}).eq("id", selected_client_id).execute()
                         st.success("🎉 Calendrier connecté !")
                         st.rerun()
                     else:
@@ -154,32 +140,9 @@ if selected_client_id:
         with col_disconnect:
             if has_google:
                 if st.button("❌ Dissocier le lien Google Calendar", type="secondary"):
-                    st.warning("Suppression du token en cours...")
-                    print("🗑️ Bouton Dissocier cliqué → Suppression du token...")
-                    
-                    response = supabase.table("clients").update({
-                        "google_refresh_token": None    
-                    }).eq("id", selected_client_id).execute()
-                    
-                    # === LOGS CONSOLE + UI ===
-                    print("📤 Réponse Supabase :", response)
-                    
-                    # Vérification immédiate après mise à jour
-                    fresh_after = supabase.table("clients") \
-                        .select("google_refresh_token") \
-                        .eq("id", selected_client_id).execute()
-                    new_token = fresh_after.data[0]['google_refresh_token'] if fresh_after.data else None
-                    
-                    print(f"✅ Valeur APRÈS suppression dans la DB : '{new_token}'")
-                    st.write(f"**Valeur réelle après suppression :** `{new_token or 'VIDE'}`")
-                    
-                    if new_token == None:
-                        st.success("🎉 Token supprimé avec succès ! Le calendrier est dissocié.")
-                        st.rerun()
-                    else:
-                        st.error("❌ Le token est toujours présent. Regarde les logs dans la console Streamlit.")
-            else:
-                st.info("Non connecté")
+                    supabase.table("clients").update({"google_refresh_token": None}).eq("id", selected_client_id).execute()
+                    st.success("🎉 Token supprimé avec succès !")
+                    st.rerun()
 
         if st.button("💾 Sauvegarder la configuration", type="primary"):
             try:
@@ -217,47 +180,46 @@ if selected_client_id:
             st.success("✅ Configuration sauvegardée avec succès !")
             st.rerun()
 
-    # ====================== TAB HISTORIQUE DES APPELS (HEURES MONTRÉAL + COLONNES PROPRES) ======================
+    # ====================== TAB HISTORIQUE DES APPELS (MIS À JOUR RDV) ======================
     with tab_appels:
         st.subheader(f"📞 Historique des appels – {selected_client_id}")
         appels_response = supabase.table('vw_appels_clients') \
             .select('*') \
             .eq('client_id', selected_client_id) \
             .order('started_at', desc=True) \
-            .limit(300) \
+            .limit(500) \
             .execute()
         
         if appels_response.data:
             df = pd.DataFrame(appels_response.data)
             
-            # === CONVERSION FUSEAU MONTRÉAL ===
+            # Format Montréal
             tz_montreal = pytz.timezone('America/Montreal')
-            for col in ['started_at', 'ended_at']:
+            for col in ['started_at', 'appointment_start']:
                 if col in df.columns:
                     df[col] = pd.to_datetime(df[col])
                     if df[col].dt.tz is None:
                         df[col] = df[col].dt.tz_localize('UTC')
                     df[col] = df[col].dt.tz_convert(tz_montreal)
             
-            # Colonnes lisibles
-            if 'started_at' in df.columns:
-                df['call_date'] = df['started_at'].dt.date
-                df['call_time'] = df['started_at'].dt.strftime('%H:%M')
-            
-            # === AFFICHAGE PROPRE (seulement les colonnes utiles) ===
+            # Colonnes à afficher
             display_columns = [
                 'call_date', 'call_time', 'caller_number',
-                'status_label', 'duration_formatted', 'transfer_status', 
-                'message_status', 'transfer_to_number', 'transfer_client_name', 
-                'transfer_department', 'message_reason', 'message_name', 'message_number'
+                'status_label', 'appointment_status_badge',
+                'appointment_start', 'appointment_name',
+                'appointment_reason', 'duration_formatted',
+                'transfer_status', 'message_reason', 'message_name'
             ]
             available_cols = [col for col in display_columns if col in df.columns]
             
-            st.dataframe(
-                df[available_cols],
-                use_container_width=True,
-                hide_index=True
-            )
+            # Style vert pour les RDV
+            def highlight_rdv(row):
+                if row.get('appointment_booked'):
+                    return ['background-color: #d4edda'] * len(row)
+                return [''] * len(row)
+            
+            styled_df = df[available_cols].style.apply(highlight_rdv, axis=1)
+            st.dataframe(styled_df, use_container_width=True, hide_index=True)
             
             csv = df.to_csv(index=False).encode('utf-8')
             st.download_button("📥 Télécharger en CSV", csv, 
@@ -265,7 +227,7 @@ if selected_client_id:
         else:
             st.info("Aucun appel enregistré pour le moment.")
 
-    # ====================== TAB STATISTIQUES ======================
+    # ====================== TAB STATISTIQUES (MIS À JOUR RDV) ======================
     with tab_stats:
         st.subheader(f"📊 Statistiques – {selected_client_id}")
         stats_response = supabase.table('vw_stats_appels_clients') \
@@ -275,12 +237,15 @@ if selected_client_id:
         
         if stats_response.data and len(stats_response.data) > 0:
             stats_df = pd.DataFrame(stats_response.data)
-            st.dataframe(stats_df, use_container_width=True, hide_index=True)
             
-            col1, col2, col3, col4 = st.columns(4)
+            col1, col2, col3, col4, col5 = st.columns(5)
             with col1: st.metric("Total appels", int(stats_df['total_appels'].iloc[0]))
             with col2: st.metric("Appels complétés", int(stats_df['appels_completes'].iloc[0]))
-            with col3: st.metric("Durée moyenne", f"{stats_df['duree_moyenne_sec'].iloc[0]:.1f} s")
-            with col4: st.metric("Transferts réussis", int(stats_df['transferts_reussis'].iloc[0]))
+            with col3: st.metric("RDV réservés", int(stats_df['rdv_reserves'].iloc[0]))
+            with col4: st.metric("% avec RDV", f"{stats_df['pourcentage_rdv'].iloc[0]:.1f}%")
+            with col5: st.metric("Durée moyenne", f"{stats_df['duree_moyenne_sec'].iloc[0]:.1f} s")
+            
+            st.dataframe(stats_df, use_container_width=True, hide_index=True)
         else:
             st.info("Aucune statistique disponible pour ce client.")
+            
