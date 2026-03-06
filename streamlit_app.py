@@ -148,7 +148,7 @@ if selected_client_id:
                 st.rerun()
             else:
                 st.error("Aucun refresh_token reçu. Réessaie.")
-                                                                
+                                                                                            
 
         if st.button("💾 Sauvegarder la configuration", type="primary"):
             try:
