@@ -38,6 +38,7 @@ selected_client_id = st.selectbox("Sélectionnez un client", list(client_options
 
 if selected_client_id:
     client = next(c for c in clients if c['id'] == selected_client_id)
+    print(f">>> Selected client: {selected_client_id}")
 
     tab_config, tab_appels, tab_stats = st.tabs([
         "⚙️ Configuration", 
@@ -122,33 +123,63 @@ if selected_client_id:
                 except json.JSONDecodeError as e:
                     st.error(f"❌ JSON invalide : {e}")
 
-        # ====================== GOOGLE CALENDAR - VERSION FINALE (Desktop + run_local_server) ======================
+        # ====================== GOOGLE CALENDAR - SANS CHECKBOX (action directe) ======================
         st.subheader("📅 Connexion Google Calendar")
-        
-        if st.button("🔗 Connecter le calendrier Google de ce client", type="primary"):
-            SCOPES = ['https://www.googleapis.com/auth/calendar']
-            
-            flow = InstalledAppFlow.from_client_secrets_file(
-                "client_secrets.json", 
-                scopes=SCOPES
-            )
-            
-            credentials = flow.run_local_server(
-                port=8502,
-                prompt='consent',
-                authorization_prompt_message="Veuillez autoriser Amélie à accéder à votre calendrier"
-            )
-            
-            if credentials and credentials.refresh_token:
-                supabase.table("clients").update({
-                    "google_refresh_token": credentials.refresh_token
-                }).eq("id", selected_client_id).execute()
                 
-                st.success("🎉 Calendrier Google connecté avec succès ! Le refresh_token est sauvegardé dans Supabase.")
-                st.rerun()
+        # Rafraîchissement forcé
+        fresh_client = next((c for c in get_clients() if c['id'] == selected_client_id), client)
+        current_token = fresh_client.get('google_refresh_token')
+        has_google = bool(current_token)
+
+        col_connect, col_disconnect = st.columns([3, 2])
+        
+        with col_connect:
+            if has_google:
+                st.success("✅ Calendrier Google **connecté**")
             else:
-                st.error("Aucun refresh_token reçu. Réessaie.")
-                                                                                            
+                if st.button("🔗 Connecter le calendrier Google de ce client", type="primary"):
+                    SCOPES = ['https://www.googleapis.com/auth/calendar']
+                    flow = InstalledAppFlow.from_client_secrets_file("client_secrets.json", scopes=SCOPES)
+                    credentials = flow.run_local_server(port=8502, prompt='consent')
+                    
+                    if credentials and credentials.refresh_token:
+                        response = supabase.table("clients").update({
+                            "google_refresh_token": credentials.refresh_token
+                        }).eq("id", selected_client_id).execute()
+                        st.success("🎉 Calendrier connecté !")
+                        st.rerun()
+                    else:
+                        st.error("Aucun refresh_token reçu.")
+
+        with col_disconnect:
+            if has_google:
+                if st.button("❌ Dissocier le lien Google Calendar", type="secondary"):
+                    st.warning("Suppression du token en cours...")
+                    print("🗑️ Bouton Dissocier cliqué → Suppression du token...")
+                    
+                    response = supabase.table("clients").update({
+                        "google_refresh_token": None    
+                    }).eq("id", selected_client_id).execute()
+                    
+                    # === LOGS CONSOLE + UI ===
+                    print("📤 Réponse Supabase :", response)
+                    
+                    # Vérification immédiate après mise à jour
+                    fresh_after = supabase.table("clients") \
+                        .select("google_refresh_token") \
+                        .eq("id", selected_client_id).execute()
+                    new_token = fresh_after.data[0]['google_refresh_token'] if fresh_after.data else None
+                    
+                    print(f"✅ Valeur APRÈS suppression dans la DB : '{new_token}'")
+                    st.write(f"**Valeur réelle après suppression :** `{new_token or 'VIDE'}`")
+                    
+                    if new_token == None:
+                        st.success("🎉 Token supprimé avec succès ! Le calendrier est dissocié.")
+                        st.rerun()
+                    else:
+                        st.error("❌ Le token est toujours présent. Regarde les logs dans la console Streamlit.")
+            else:
+                st.info("Non connecté")
 
         if st.button("💾 Sauvegarder la configuration", type="primary"):
             try:
