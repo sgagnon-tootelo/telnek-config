@@ -5,6 +5,7 @@ from supabase import create_client, Client
 from datetime import datetime
 import pytz
 from google_auth_oauthlib.flow import InstalledAppFlow
+import requests
 
 # ==================== CONNEXION SUPABASE ====================
 supabase_url = st.secrets["SUPABASE_URL"]
@@ -180,7 +181,7 @@ if selected_client_id:
             st.success("✅ Configuration sauvegardée avec succès !")
             st.rerun()
 
-    # ====================== TAB HISTORIQUE DES APPELS ======================
+    # ====================== TAB HISTORIQUE DES APPELS + ÉCOUTE WAV ======================
     with tab_appels:
         st.subheader(f"📞 Historique des appels – {selected_client_id}")
         
@@ -203,24 +204,24 @@ if selected_client_id:
                         df[col] = df[col].dt.tz_localize('UTC')
                     df[col] = df[col].dt.tz_convert(tz_montreal)
             
-            # === TRANSCRIPTION DISPONIBLE DIRECTEMENT DANS LA TABLE ===
-            # Aperçu court (85 caractères) qui apparaît dans le tableau
+            # Aperçu transcription + indicateur audio
             df['transcript_preview'] = df['transcript'].fillna('').astype(str).apply(
                 lambda x: (x[:85] + '...') if len(x) > 85 else x
             )
+            df['🎧'] = df.apply(
+                lambda row: '✅' if any(pd.notna(row.get(col)) for col in ['recording_url', 'audio_url', 'wav_url', 'recording']) else '',
+                axis=1
+            )
 
-            # Colonnes affichées (la transcription est maintenant dedans !)
+            # Colonnes du tableau
             display_columns = [
                 'call_date', 'call_time', 'caller_number',
-                'status_label', 'appointment_status_badge',
-                'appointment_start', 'appointment_name',
-                'appointment_reason', 'duration_formatted',
-                'transfer_status', 'message_reason', 'message_name',
-                'transcript_preview'          # ← maintenant intégré dans la table
+                '🎧', 'status_label', 'appointment_status_badge',
+                'appointment_start', 'appointment_name', 'duration_formatted',
+                'transcript_preview'
             ]
             available_cols = [col for col in display_columns if col in df.columns]
             
-            # Style vert pour les RDV
             def highlight_rdv(row):
                 if row.get('appointment_booked'):
                     return ['background-color: #d4edda'] * len(row)
@@ -228,46 +229,84 @@ if selected_client_id:
             
             styled_df = df[available_cols].style.apply(highlight_rdv, axis=1)
             
-            # Tableau interactif + sélection de ligne
-            st.caption("👇 Clique sur une ligne du tableau pour voir la **transcription complète**")
+            st.caption("👇 Clique sur une ligne pour afficher la transcription + écouter l’enregistrement")
             event = st.dataframe(
                 styled_df,
                 use_container_width=True,
                 hide_index=True,
                 on_select="rerun",
                 selection_mode="single-row",
-                key=f"call_table_{selected_client_id}"   # évite les conflits de clé
+                key=f"call_table_{selected_client_id}"
             )
             
-            # Bouton CSV (inclut la transcription complète)
+            # Téléchargement CSV
             csv = df.to_csv(index=False).encode('utf-8')
             st.download_button("📥 Télécharger en CSV", csv, 
                              f"appels_{selected_client_id}.csv", "text/csv")
 
-            # ====================== TRANSCRIPTION DE L'APPEL SÉLECTIONNÉ ======================
+            # ====================== DÉTAIL SÉLECTIONNÉ (AUDIO + TRANSCRIPTION) ======================
             if event.selection.rows:
-                selected_idx = event.selection.rows[0]
-                row = df.iloc[selected_idx]
+                row = df.iloc[event.selection.rows[0]]
                 
                 st.divider()
-                st.subheader(f"🔊 Transcription complète — {row.get('call_date')} {row.get('call_time')} ({row.get('caller_number')})")
-                
+                st.subheader(f"🔊 Appel du {row.get('call_date')} {row.get('call_time')} — {row.get('caller_number')}")
+
+                # === LECTEUR AUDIO SÉCURISÉ (proxy Twilio côté serveur) ===
+                st.subheader("🎧 Enregistrement de l'appel")
+
+                recording_url = row.get('recording_url')
+
+                if recording_url and isinstance(recording_url, str) and recording_url.startswith('http'):
+                    try:
+                        account_sid = st.secrets["TWILIO_ACCOUNT_SID"]
+                        auth_token = st.secrets["TWILIO_AUTH_TOKEN"]
+
+                        # Téléchargement sécurisé côté serveur (jamais exposé au navigateur)
+                        response = requests.get(
+                            recording_url,
+                            auth=(account_sid, auth_token),
+                            timeout=15
+                        )
+
+                        if response.status_code == 200:
+                            audio_bytes = response.content
+                            
+                            st.success("✅ Enregistrement chargé avec succès")
+                            st.audio(audio_bytes, format="audio/wav")
+                            
+                            # Bouton téléchargement (les bytes sont déjà en mémoire)
+                            st.download_button(
+                                label="📥 Télécharger l'enregistrement WAV",
+                                data=audio_bytes,
+                                file_name=f"appel_{row.get('caller_number','inconnu')}_{row.get('call_date','')}.wav",
+                                mime="audio/wav"
+                            )
+                        else:
+                            st.error(f"❌ Twilio a refusé l'accès (code {response.status_code})")
+                            st.caption(f"URL testée : {recording_url[:80]}...")
+
+                    except Exception as e:
+                        st.error(f"Erreur lors du chargement de l'enregistrement : {str(e)}")
+                else:
+                    st.info("🔇 Aucun enregistrement disponible pour cet appel.")
+                                    # === TRANSCRIPTION ===
+                st.subheader("📝 Transcription complète")
                 transcript = row.get('transcript', '')
                 if transcript and str(transcript).strip():
-                    st.text_area("Transcription complète", transcript, height=420, key="full_trans")
+                    st.text_area("Transcription complète", transcript, height=380, key="full_trans")
                     
-                    # Version structurée par locuteur
+                    # Version par locuteur
                     transcript_json = row.get('transcript_json')
                     if transcript_json and isinstance(transcript_json, list):
-                        with st.expander("👥 Voir par locuteur"):
+                        with st.expander("👥 Détail par locuteur"):
                             for segment in transcript_json[:30]:
                                 speaker = segment.get('speaker', 'Inconnu')
                                 text = segment.get('text', '')
                                 st.markdown(f"**{speaker}** : {text}")
                 else:
-                    st.info("Aucune transcription disponible pour cet appel.")
+                    st.info("Aucune transcription disponible.")
             else:
-                st.info("Sélectionne une ligne dans le tableau ci-dessus pour afficher la transcription complète.")
+                st.info("Sélectionne une ligne dans le tableau ci-dessus.")
                 
         else:
             st.info("Aucun appel enregistré pour le moment.")
