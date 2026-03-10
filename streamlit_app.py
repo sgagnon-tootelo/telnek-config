@@ -180,9 +180,10 @@ if selected_client_id:
             st.success("✅ Configuration sauvegardée avec succès !")
             st.rerun()
 
-    # ====================== TAB HISTORIQUE DES APPELS (avec transcriptions) ======================
+    # ====================== TAB HISTORIQUE DES APPELS ======================
     with tab_appels:
         st.subheader(f"📞 Historique des appels – {selected_client_id}")
+        
         appels_response = supabase.table('vw_appels_clients') \
             .select('*') \
             .eq('client_id', selected_client_id) \
@@ -202,13 +203,20 @@ if selected_client_id:
                         df[col] = df[col].dt.tz_localize('UTC')
                     df[col] = df[col].dt.tz_convert(tz_montreal)
             
-            # Colonnes principales (tableau propre)
+            # === TRANSCRIPTION DISPONIBLE DIRECTEMENT DANS LA TABLE ===
+            # Aperçu court (85 caractères) qui apparaît dans le tableau
+            df['transcript_preview'] = df['transcript'].fillna('').astype(str).apply(
+                lambda x: (x[:85] + '...') if len(x) > 85 else x
+            )
+
+            # Colonnes affichées (la transcription est maintenant dedans !)
             display_columns = [
                 'call_date', 'call_time', 'caller_number',
                 'status_label', 'appointment_status_badge',
                 'appointment_start', 'appointment_name',
                 'appointment_reason', 'duration_formatted',
-                'transfer_status', 'message_reason', 'message_name'
+                'transfer_status', 'message_reason', 'message_name',
+                'transcript_preview'          # ← maintenant intégré dans la table
             ]
             available_cols = [col for col in display_columns if col in df.columns]
             
@@ -219,40 +227,52 @@ if selected_client_id:
                 return [''] * len(row)
             
             styled_df = df[available_cols].style.apply(highlight_rdv, axis=1)
-            st.dataframe(styled_df, use_container_width=True, hide_index=True)
             
+            # Tableau interactif + sélection de ligne
+            st.caption("👇 Clique sur une ligne du tableau pour voir la **transcription complète**")
+            event = st.dataframe(
+                styled_df,
+                use_container_width=True,
+                hide_index=True,
+                on_select="rerun",
+                selection_mode="single-row",
+                key=f"call_table_{selected_client_id}"   # évite les conflits de clé
+            )
+            
+            # Bouton CSV (inclut la transcription complète)
             csv = df.to_csv(index=False).encode('utf-8')
             st.download_button("📥 Télécharger en CSV", csv, 
                              f"appels_{selected_client_id}.csv", "text/csv")
 
-            # ====================== TRANSCRIPTIONS ======================
-            st.divider()
-            st.subheader("📝 Transcriptions complètes des appels")
-
-            for idx, row in df.iterrows():
-                call_info = f"{row.get('call_date', '')} {row.get('call_time', '')} — {row.get('caller_number', 'Inconnu')}"
-                status = row.get('status_label', row.get('status', 'Inconnu'))
+            # ====================== TRANSCRIPTION DE L'APPEL SÉLECTIONNÉ ======================
+            if event.selection.rows:
+                selected_idx = event.selection.rows[0]
+                row = df.iloc[selected_idx]
                 
-                with st.expander(f"🔊 {call_info} ({status})"):
-                    transcript = row.get('transcript', None)
-                    if transcript and str(transcript).strip():
-                        st.text_area("Transcription complète", transcript, height=250, key=f"trans_text_{idx}")
-                    else:
-                        st.info("Aucune transcription disponible pour cet appel.")
+                st.divider()
+                st.subheader(f"🔊 Transcription complète — {row.get('call_date')} {row.get('call_time')} ({row.get('caller_number')})")
+                
+                transcript = row.get('transcript', '')
+                if transcript and str(transcript).strip():
+                    st.text_area("Transcription complète", transcript, height=420, key="full_trans")
                     
-                    # Bonus : affichage structuré (speaker par speaker)
+                    # Version structurée par locuteur
                     transcript_json = row.get('transcript_json')
                     if transcript_json and isinstance(transcript_json, list):
-                        st.caption("Détail par locuteur :")
-                        for segment in transcript_json[:20]:  # limite à 20 pour ne pas surcharger
-                            speaker = segment.get('speaker', 'Inconnu')
-                            text = segment.get('text', '')
-                            st.markdown(f"**{speaker}** : {text}")
-
+                        with st.expander("👥 Voir par locuteur"):
+                            for segment in transcript_json[:30]:
+                                speaker = segment.get('speaker', 'Inconnu')
+                                text = segment.get('text', '')
+                                st.markdown(f"**{speaker}** : {text}")
+                else:
+                    st.info("Aucune transcription disponible pour cet appel.")
+            else:
+                st.info("Sélectionne une ligne dans le tableau ci-dessus pour afficher la transcription complète.")
+                
         else:
             st.info("Aucun appel enregistré pour le moment.")
-            
-    # ====================== TAB STATISTIQUES (MIS À JOUR RDV) ======================
+
+    # ====================== TAB STATISTIQUES (avec appels abandonnés) ======================
     with tab_stats:
         st.subheader(f"📊 Statistiques – {selected_client_id}")
         stats_response = supabase.table('vw_stats_appels_clients') \
@@ -263,14 +283,50 @@ if selected_client_id:
         if stats_response.data and len(stats_response.data) > 0:
             stats_df = pd.DataFrame(stats_response.data)
             
-            col1, col2, col3, col4, col5 = st.columns(5)
-            with col1: st.metric("Total appels", int(stats_df['total_appels'].iloc[0]))
-            with col2: st.metric("Appels complétés", int(stats_df['appels_completes'].iloc[0]))
-            with col3: st.metric("RDV réservés", int(stats_df['rdv_reserves'].iloc[0]))
-            with col4: st.metric("% avec RDV", f"{stats_df['pourcentage_rdv'].iloc[0]:.1f}%")
-            with col5: st.metric("Durée moyenne", f"{stats_df['duree_moyenne_sec'].iloc[0]:.1f} s")
+    # ====================== TAB STATISTIQUES - Appels abandonnés EXACTS ======================
+    with tab_stats:
+        st.subheader(f"📊 Statistiques – {selected_client_id}")
+        
+        stats_response = supabase.table('vw_stats_appels_clients') \
+            .select('*') \
+            .eq('client_id', selected_client_id) \
+            .execute()
+        
+        if stats_response.data and len(stats_response.data) > 0:
+            stats_df = pd.DataFrame(stats_response.data)
             
+            total = int(stats_df['total_appels'].iloc[0])
+            completes = int(stats_df['appels_completes'].iloc[0])
+            
+            # ====================== COMPTE PRÉCIS DES ABANDONNÉS ======================
+            abandoned_response = supabase.table('vw_appels_clients') \
+                .select("*", count="exact") \
+                .eq('client_id', selected_client_id) \
+                .eq('status', 'abandoned') \
+                .execute()
+            
+            appels_abandonnes = abandoned_response.count or 0
+            
+            # Métriques (6 colonnes)
+            col1, col2, col3, col4, col5, col6 = st.columns(6)
+            with col1: 
+                st.metric("📞 Total appels", total)
+            with col2: 
+                st.metric("✅ Appels complétés", completes)
+            with col3: 
+                st.metric("📅 RDV réservés", int(stats_df['rdv_reserves'].iloc[0]))
+            with col4: 
+                st.metric("% avec RDV", f"{stats_df['pourcentage_rdv'].iloc[0]:.1f}%")
+            with col5: 
+                st.metric("⏱️ Durée moyenne", f"{stats_df['duree_moyenne_sec'].iloc[0]:.1f} s")
+            with col6: 
+                st.metric("📵 Appels abandonnés", appels_abandonnes,
+                          delta=f"-{appels_abandonnes}" if appels_abandonnes > 0 else None)
+
+            # Taux d'abandon
+            pourcent_abandon = (appels_abandonnes / total * 100) if total > 0 else 0
+            st.caption(f"**Taux d'abandon : {pourcent_abandon:.1f}%**")
+
             st.dataframe(stats_df, use_container_width=True, hide_index=True)
         else:
             st.info("Aucune statistique disponible pour ce client.")
-            
