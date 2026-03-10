@@ -180,7 +180,7 @@ if selected_client_id:
             st.success("✅ Configuration sauvegardée avec succès !")
             st.rerun()
 
-    # ====================== TAB HISTORIQUE DES APPELS (MIS À JOUR RDV) ======================
+    # ====================== TAB HISTORIQUE DES APPELS (avec transcriptions) ======================
     with tab_appels:
         st.subheader(f"📞 Historique des appels – {selected_client_id}")
         appels_response = supabase.table('vw_appels_clients') \
@@ -202,7 +202,7 @@ if selected_client_id:
                         df[col] = df[col].dt.tz_localize('UTC')
                     df[col] = df[col].dt.tz_convert(tz_montreal)
             
-            # Colonnes à afficher
+            # Colonnes principales (tableau propre)
             display_columns = [
                 'call_date', 'call_time', 'caller_number',
                 'status_label', 'appointment_status_badge',
@@ -224,9 +224,34 @@ if selected_client_id:
             csv = df.to_csv(index=False).encode('utf-8')
             st.download_button("📥 Télécharger en CSV", csv, 
                              f"appels_{selected_client_id}.csv", "text/csv")
+
+            # ====================== TRANSCRIPTIONS ======================
+            st.divider()
+            st.subheader("📝 Transcriptions complètes des appels")
+
+            for idx, row in df.iterrows():
+                call_info = f"{row.get('call_date', '')} {row.get('call_time', '')} — {row.get('caller_number', 'Inconnu')}"
+                status = row.get('status_label', row.get('status', 'Inconnu'))
+                
+                with st.expander(f"🔊 {call_info} ({status})"):
+                    transcript = row.get('transcript', None)
+                    if transcript and str(transcript).strip():
+                        st.text_area("Transcription complète", transcript, height=250, key=f"trans_text_{idx}")
+                    else:
+                        st.info("Aucune transcription disponible pour cet appel.")
+                    
+                    # Bonus : affichage structuré (speaker par speaker)
+                    transcript_json = row.get('transcript_json')
+                    if transcript_json and isinstance(transcript_json, list):
+                        st.caption("Détail par locuteur :")
+                        for segment in transcript_json[:20]:  # limite à 20 pour ne pas surcharger
+                            speaker = segment.get('speaker', 'Inconnu')
+                            text = segment.get('text', '')
+                            st.markdown(f"**{speaker}** : {text}")
+
         else:
             st.info("Aucun appel enregistré pour le moment.")
-
+            
     # ====================== TAB STATISTIQUES (MIS À JOUR RDV) ======================
     with tab_stats:
         st.subheader(f"📊 Statistiques – {selected_client_id}")
