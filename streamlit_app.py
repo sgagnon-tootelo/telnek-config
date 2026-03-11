@@ -310,17 +310,6 @@ if selected_client_id:
                 
         else:
             st.info("Aucun appel enregistré pour le moment.")
-
-    # ====================== TAB STATISTIQUES (avec appels abandonnés) ======================
-    with tab_stats:
-        st.subheader(f"📊 Statistiques – {selected_client_id}")
-        stats_response = supabase.table('vw_stats_appels_clients') \
-            .select('*') \
-            .eq('client_id', selected_client_id) \
-            .execute()
-        
-        if stats_response.data and len(stats_response.data) > 0:
-            stats_df = pd.DataFrame(stats_response.data)
             
     # ====================== TAB STATISTIQUES - Appels abandonnés EXACTS ======================
     with tab_stats:
