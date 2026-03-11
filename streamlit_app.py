@@ -195,15 +195,20 @@ if selected_client_id:
         if appels_response.data:
             df = pd.DataFrame(appels_response.data)
             
-            # Format Montréal
+            # Format Montréal (version robuste)
             tz_montreal = pytz.timezone('America/Montreal')
             for col in ['started_at', 'appointment_start']:
                 if col in df.columns:
-                    df[col] = pd.to_datetime(df[col])
-                    if df[col].dt.tz is None:
-                        df[col] = df[col].dt.tz_localize('UTC')
-                    df[col] = df[col].dt.tz_convert(tz_montreal)
-            
+                    # Conversion sécurisée : les valeurs invalides deviennent NaT
+                    df[col] = pd.to_datetime(df[col], errors='coerce')
+                    
+                    # On ne touche que les lignes valides
+                    mask = df[col].notna()
+                    if mask.any():
+                        if df.loc[mask, col].dt.tz is None:
+                            df.loc[mask, col] = df.loc[mask, col].dt.tz_localize('UTC')
+                        df.loc[mask, col] = df.loc[mask, col].dt.tz_convert(tz_montreal)
+                                    
             # Aperçu transcription + indicateur audio
             df['transcript_preview'] = df['transcript'].fillna('').astype(str).apply(
                 lambda x: (x[:85] + '...') if len(x) > 85 else x
