@@ -116,17 +116,25 @@ if selected_client_id:
                 except json.JSONDecodeError as e:
                     st.error(f"❌ JSON invalide : {e}")
 
-        get_caller_history_flag = client.get('get_caller_history_flag', False)
-        
-        get_caller_history_flag = st.toggle("Activé mémoire de l'appelant", value=get_caller_history_flag)
-        if get_caller_history_flag:
-            st.write("Mémoire de l'appelant activé!")
+        col1, col2 = st.columns(2)
 
-        call_transcription_flag = client.get('call_transcription_flag', False)
-        
-        call_transcription_flag = st.toggle("Activé la transcription de l'appel", value=call_transcription_flag)
+        with col1:
+            get_caller_history_flag = st.toggle(
+                "Activé mémoire de l'appelant", 
+                value=client.get('get_caller_history_flag', False)
+            )
+
+        with col2:
+            call_transcription_flag = st.toggle(
+                "Activé la transcription de l'appel", 
+                value=client.get('call_transcription_flag', False)
+            )
+
+        # Optionnel : petit feedback visuel
+        if get_caller_history_flag:
+            st.caption("→ Mémoire de l'appelant activée")
         if call_transcription_flag:
-            st.write("Transcription de l'appel est activé!")
+            st.caption("→ Transcription des appels activée")
 
         # ====================== GOOGLE CALENDAR (identique à ta version) ======================
         st.subheader("📅 Connexion Google Calendar")
