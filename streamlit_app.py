@@ -116,6 +116,12 @@ if selected_client_id:
                 except json.JSONDecodeError as e:
                     st.error(f"❌ JSON invalide : {e}")
 
+        get_caller_history_flag = client.get('get_caller_history_flag', False)
+        
+        get_caller_history_flag = st.toggle("Activé mémoire de l'appelant", value=get_caller_history_flag)
+        if get_caller_history_flag:
+            st.write("Mémoire de l'appelant activé!")
+
         # ====================== GOOGLE CALENDAR (identique à ta version) ======================
         st.subheader("📅 Connexion Google Calendar")
         fresh_client = next((c for c in get_clients() if c['id'] == selected_client_id), client)
@@ -175,7 +181,8 @@ if selected_client_id:
                 'agent_name': agent_name,
                 'voice_name': voice_name,
                 'transfer_mode': transfer_mode_selected,
-                'transfer_numbers': transfer_numbers_parsed
+                'transfer_numbers': transfer_numbers_parsed,
+                'get_caller_history_flag': get_caller_history_flag
             }
             update_client(selected_client_id, updated_data)
             st.success("✅ Configuration sauvegardée avec succès !")
