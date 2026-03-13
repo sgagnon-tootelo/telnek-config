@@ -122,6 +122,12 @@ if selected_client_id:
         if get_caller_history_flag:
             st.write("Mémoire de l'appelant activé!")
 
+        call_transcription_flag = client.get('call_transcription_flag', False)
+        
+        call_transcription_flag = st.toggle("Activé la transcription de l'appel", value=call_transcription_flag)
+        if call_transcription_flag:
+            st.write("Transcription de l'appel est activé!")
+
         # ====================== GOOGLE CALENDAR (identique à ta version) ======================
         st.subheader("📅 Connexion Google Calendar")
         fresh_client = next((c for c in get_clients() if c['id'] == selected_client_id), client)
@@ -182,7 +188,8 @@ if selected_client_id:
                 'voice_name': voice_name,
                 'transfer_mode': transfer_mode_selected,
                 'transfer_numbers': transfer_numbers_parsed,
-                'get_caller_history_flag': get_caller_history_flag
+                'get_caller_history_flag': get_caller_history_flag,
+                'call_transcription_flag': call_transcription_flag
             }
             update_client(selected_client_id, updated_data)
             st.success("✅ Configuration sauvegardée avec succès !")
