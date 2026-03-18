@@ -203,7 +203,7 @@ if selected_client_id:
             st.success("✅ Configuration sauvegardée avec succès !")
             st.rerun()
 
-    # ====================== TAB HISTORIQUE DES APPELS + ÉCOUTE WAV ======================
+    # ====================== TAB HISTORIQUE DES APPELS + ÉCOUTE WAV (MIS À JOUR) ======================
     with tab_appels:
         st.subheader(f"📞 Historique des appels – {selected_client_id}")
         
@@ -221,16 +221,35 @@ if selected_client_id:
             tz_montreal = pytz.timezone('America/Montreal')
             for col in ['started_at', 'appointment_start']:
                 if col in df.columns:
-                    # Conversion sécurisée : les valeurs invalides deviennent NaT
                     df[col] = pd.to_datetime(df[col], errors='coerce')
-                    
-                    # On ne touche que les lignes valides
                     mask = df[col].notna()
                     if mask.any():
                         if df.loc[mask, col].dt.tz is None:
                             df.loc[mask, col] = df.loc[mask, col].dt.tz_localize('UTC')
                         df.loc[mask, col] = df.loc[mask, col].dt.tz_convert(tz_montreal)
                                     
+            # ====================== NOUVEAU : STATUT RDV ======================
+            def get_rdv_status(row):
+                if not row.get('appointment_booked', False):
+                    return "—"
+                elif row.get('appointment_cancelled', False):
+                    return "❌ Annulé"
+                elif row.get('appointment_confirmed', False):
+                    return "✅ Confirmé"
+                else:
+                    return "⏳ À confirmer"
+
+            df['statut_rdv'] = df.apply(get_rdv_status, axis=1)
+
+            def color_rdv_status(val):
+                if "Confirmé" in str(val):
+                    return 'background-color: #d4edda; color: #155724'
+                elif "Annulé" in str(val):
+                    return 'background-color: #f8d7da; color: #721c24'
+                elif "À confirmer" in str(val):
+                    return 'background-color: #fff3cd; color: #856404'
+                return ''
+
             # Aperçu transcription + indicateur audio
             df['transcript_preview'] = df['transcript'].fillna('').astype(str).apply(
                 lambda x: (x[:85] + '...') if len(x) > 85 else x
@@ -243,7 +262,7 @@ if selected_client_id:
             # Colonnes du tableau
             display_columns = [
                 'call_date', 'call_time', 'caller_number',
-                '🎧', 'status_label', 'appointment_status_badge',
+                '🎧', 'status_label', 'statut_rdv',
                 'appointment_start', 'appointment_name', 'duration_formatted',
                 'transcript_preview'
             ]
@@ -255,6 +274,7 @@ if selected_client_id:
                 return [''] * len(row)
             
             styled_df = df[available_cols].style.apply(highlight_rdv, axis=1)
+            styled_df = styled_df.applymap(color_rdv_status, subset=['statut_rdv'])
             
             st.caption("👇 Clique sur une ligne pour afficher la transcription + écouter l’enregistrement")
             event = st.dataframe(
@@ -271,37 +291,28 @@ if selected_client_id:
             st.download_button("📥 Télécharger en CSV", csv, 
                              f"appels_{selected_client_id}.csv", "text/csv")
 
-            # ====================== DÉTAIL SÉLECTIONNÉ (AUDIO + TRANSCRIPTION) ======================
+            # ====================== DÉTAIL SÉLECTIONNÉ ======================
             if event.selection.rows:
                 row = df.iloc[event.selection.rows[0]]
                 
                 st.divider()
                 st.subheader(f"🔊 Appel du {row.get('call_date')} {row.get('call_time')} — {row.get('caller_number')}")
+                
+                # Statut RDV en évidence
+                st.markdown(f"**Statut du rendez-vous :** {row.get('statut_rdv', '—')}")
 
-                # === LECTEUR AUDIO SÉCURISÉ (proxy Twilio côté serveur) ===
+                # === LECTEUR AUDIO ===
                 st.subheader("🎧 Enregistrement de l'appel")
-
                 recording_url = row.get('recording_url')
-
                 if recording_url and isinstance(recording_url, str) and recording_url.startswith('http'):
                     try:
                         account_sid = st.secrets["TWILIO_ACCOUNT_SID"]
                         auth_token = st.secrets["TWILIO_AUTH_TOKEN"]
-
-                        # Téléchargement sécurisé côté serveur (jamais exposé au navigateur)
-                        response = requests.get(
-                            recording_url,
-                            auth=(account_sid, auth_token),
-                            timeout=15
-                        )
-
+                        response = requests.get(recording_url, auth=(account_sid, auth_token), timeout=15)
                         if response.status_code == 200:
                             audio_bytes = response.content
-                            
                             st.success("✅ Enregistrement chargé avec succès")
                             st.audio(audio_bytes, format="audio/wav")
-                            
-                            # Bouton téléchargement (les bytes sont déjà en mémoire)
                             st.download_button(
                                 label="📥 Télécharger l'enregistrement WAV",
                                 data=audio_bytes,
@@ -310,26 +321,16 @@ if selected_client_id:
                             )
                         else:
                             st.error(f"❌ Twilio a refusé l'accès (code {response.status_code})")
-                            st.caption(f"URL testée : {recording_url[:80]}...")
-
                     except Exception as e:
-                        st.error(f"Erreur lors du chargement de l'enregistrement : {str(e)}")
+                        st.error(f"Erreur lors du chargement : {str(e)}")
                 else:
                     st.info("🔇 Aucun enregistrement disponible pour cet appel.")
-                                    # === TRANSCRIPTION ===
+                
+                # === TRANSCRIPTION ===
                 st.subheader("📝 Transcription complète")
                 transcript = row.get('transcript', '')
                 if transcript and str(transcript).strip():
-                    st.text_area("Transcription complète", transcript, height=380, key="full_trans")
-                    
-                    # Version par locuteur
-                    transcript_json = row.get('transcript_json')
-                    if transcript_json and isinstance(transcript_json, list):
-                        with st.expander("👥 Détail par locuteur"):
-                            for segment in transcript_json[:30]:
-                                speaker = segment.get('speaker', 'Inconnu')
-                                text = segment.get('text', '')
-                                st.markdown(f"**{speaker}** : {text}")
+                    st.text_area("Transcription complète", transcript, height=380)
                 else:
                     st.info("Aucune transcription disponible.")
             else:
@@ -337,8 +338,8 @@ if selected_client_id:
                 
         else:
             st.info("Aucun appel enregistré pour le moment.")
-            
-    # ====================== TAB STATISTIQUES - Appels abandonnés EXACTS ======================
+
+    # ====================== TAB STATISTIQUES – Appels abandonnés + RDV confirmés/annulés ======================
     with tab_stats:
         st.subheader(f"📊 Statistiques – {selected_client_id}")
         
@@ -353,17 +354,34 @@ if selected_client_id:
             total = int(stats_df['total_appels'].iloc[0])
             completes = int(stats_df['appels_completes'].iloc[0])
             
-            # ====================== COMPTE PRÉCIS DES ABANDONNÉS ======================
+            # ====================== NOUVEAUX COMPTES CONFIRMÉS / ANNULÉS ======================
             abandoned_response = supabase.table('vw_appels_clients') \
                 .select("*", count="exact") \
                 .eq('client_id', selected_client_id) \
                 .eq('status', 'abandoned') \
                 .execute()
             
+            confirmed_response = supabase.table('vw_appels_clients') \
+                .select("*", count="exact") \
+                .eq('client_id', selected_client_id) \
+                .eq('appointment_confirmed', True) \
+                .execute()
+
+            cancelled_response = supabase.table('vw_appels_clients') \
+                .select("*", count="exact") \
+                .eq('client_id', selected_client_id) \
+                .eq('appointment_cancelled', True) \
+                .execute()
+
             appels_abandonnes = abandoned_response.count or 0
-            
-            # Métriques (6 colonnes)
-            col1, col2, col3, col4, col5, col6 = st.columns(6)
+            rdv_confirmes = confirmed_response.count or 0
+            rdv_annules = cancelled_response.count or 0
+
+            total_rdv_repondus = rdv_confirmes + rdv_annules
+            taux_confirmation = (rdv_confirmes / total_rdv_repondus * 100) if total_rdv_repondus > 0 else 0
+
+            # Métriques (8 colonnes)
+            col1, col2, col3, col4, col5, col6, col7, col8 = st.columns(8)
             with col1: 
                 st.metric("📞 Total appels", total)
             with col2: 
@@ -375,13 +393,18 @@ if selected_client_id:
             with col5: 
                 st.metric("⏱️ Durée moyenne", f"{stats_df['duree_moyenne_sec'].iloc[0]:.1f} s")
             with col6: 
-                st.metric("📵 Appels abandonnés", appels_abandonnes,
-                          delta=f"-{appels_abandonnes}" if appels_abandonnes > 0 else None)
+                st.metric("📵 Appels abandonnés", appels_abandonnes)
+            with col7: 
+                st.metric("✅ RDV Confirmés", rdv_confirmes)
+            with col8: 
+                st.metric("❌ RDV Annulés", rdv_annules,
+                          delta=f"{taux_confirmation:.1f}% confirmés" if total_rdv_repondus > 0 else None)
 
             # Taux d'abandon
             pourcent_abandon = (appels_abandonnes / total * 100) if total > 0 else 0
-            st.caption(f"**Taux d'abandon : {pourcent_abandon:.1f}%**")
+            st.caption(f"**Taux d'abandon : {pourcent_abandon:.1f}%** | **Taux de confirmation RDV : {taux_confirmation:.1f}%**")
 
             st.dataframe(stats_df, use_container_width=True, hide_index=True)
         else:
             st.info("Aucune statistique disponible pour ce client.")
+            
