@@ -6,6 +6,7 @@ from datetime import datetime
 import pytz
 from google_auth_oauthlib.flow import InstalledAppFlow
 import requests
+from streamlit_autorefresh import st_autorefresh
 
 # ==================== CONNEXION SUPABASE ====================
 supabase_url = st.secrets["SUPABASE_URL"]
@@ -36,13 +37,67 @@ selected_client_id = st.selectbox("Sélectionnez un client", list(client_options
 if selected_client_id:
     client = next(c for c in clients if c['id'] == selected_client_id)
 
-    tab_config, tab_appels, tab_stats = st.tabs([
-        "⚙️ Configuration", 
-        "📞 Historique des appels", 
+    # ====================== TABS PRINCIPAUX ======================
+    tab_global, tab_config, tab_appels, tab_stats = st.tabs([
+        "🌍 Dashboard Global (tous les clients)",
+        "⚙️ Configuration client",
+        "📞 Historique des appels",
         "📊 Statistiques"
     ])
 
-    # ====================== TAB CONFIGURATION (identique à ta version) ======================
+    # ====================== TAB DASHBOARD GLOBAL ======================
+    with tab_global:
+        st.subheader("🌍 Dashboard Global – Tous les clients")
+        
+        auto_refresh = st.toggle("🔄 Rafraîchissement automatique toutes les 5 secondes", 
+                                value=True, key="global_refresh")
+        
+        if auto_refresh:
+            st_autorefresh(interval=5000, limit=300, key="global_auto")
+
+        # Requête SANS filtre client_id → tout le monde !
+        live_response = supabase.table('vw_appels_clients') \
+            .select('client_id, company_name, call_date, call_time, caller_number, room_name, status_label, started_at') \
+            .eq('status', 'in_progress') \
+            .order('started_at', desc=True) \
+            .execute()
+        
+        if live_response.data:
+            df_global = pd.DataFrame(live_response.data)
+            
+            tz_montreal = pytz.timezone('America/Montreal')
+            now = datetime.now(tz_montreal)
+            
+            df_global['started_at'] = pd.to_datetime(df_global['started_at'])
+            if df_global['started_at'].dt.tz is None:
+                df_global['started_at'] = df_global['started_at'].dt.tz_localize('UTC')
+            df_global['started_at'] = df_global['started_at'].dt.tz_convert(tz_montreal)
+            
+            df_global['Durée en cours'] = df_global['started_at'].apply(
+                lambda x: str(now - x).split('.')[0] + " min" if (now - x).total_seconds() > 60 else "Moins d'1 min"
+            )
+            
+            # Colonnes propres
+            display_cols = ['company_name', 'call_date', 'call_time', 'caller_number', 'Durée en cours', 'room_name']
+            styled = df_global[display_cols].style.apply(
+                lambda row: ['background-color: #d4edda'] * len(row) if 'min' in str(row['Durée en cours']) else [''] * len(row),
+                axis=1
+            )
+            
+            st.dataframe(styled, use_container_width=True, hide_index=True)
+            
+            total_live = len(df_global)
+            st.metric("📞 TOTAL appels en cours (tous clients confondus)", total_live, 
+                     delta="Attention ! Plusieurs appels simultanés" if total_live > 3 else None)
+            
+            if st.button("🛑 Rafraîchir maintenant", type="primary"):
+                st.rerun()
+                
+        else:
+            st.success("✅ Aucun appel en cours pour aucun client. Tout est calme dans l’empire Amélie ! 😌")
+            st.caption("Le dashboard global se met à jour tout seul quand quelqu’un appelle.")
+
+            # ====================== TAB CONFIGURATION (identique à ta version) ======================
     with tab_config:
         st.subheader(f"Paramètres pour {selected_client_id}")
         
@@ -407,4 +462,4 @@ if selected_client_id:
             st.dataframe(stats_df, use_container_width=True, hide_index=True)
         else:
             st.info("Aucune statistique disponible pour ce client.")
-            
+
