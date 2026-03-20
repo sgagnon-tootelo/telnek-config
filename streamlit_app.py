@@ -45,9 +45,9 @@ if selected_client_id:
         "📊 Statistiques"
     ])
 
-    # ====================== TAB DASHBOARD GLOBAL ======================
+    # ====================== TAB DASHBOARD GLOBAL (avec stats cumulatives – CORRIGÉ) ======================
     with tab_global:
-        st.subheader("🌍 Dashboard Global – Tous les clients")
+        st.subheader("🌍 Dashboard Global – Tous les clients Amélie")
         
         auto_refresh = st.toggle("🔄 Rafraîchissement automatique toutes les 5 secondes", 
                                 value=True, key="global_refresh")
@@ -55,7 +55,7 @@ if selected_client_id:
         if auto_refresh:
             st_autorefresh(interval=5000, limit=300, key="global_auto")
 
-        # Requête SANS filtre client_id → tout le monde !
+        # ====================== APPELS EN COURS (live) ======================
         live_response = supabase.table('vw_appels_clients') \
             .select('client_id, company_name, call_date, call_time, caller_number, room_name, status_label, started_at') \
             .eq('status', 'in_progress') \
@@ -77,7 +77,6 @@ if selected_client_id:
                 lambda x: str(now - x).split('.')[0] + " min" if (now - x).total_seconds() > 60 else "Moins d'1 min"
             )
             
-            # Colonnes propres
             display_cols = ['company_name', 'call_date', 'call_time', 'caller_number', 'Durée en cours', 'room_name']
             styled = df_global[display_cols].style.apply(
                 lambda row: ['background-color: #d4edda'] * len(row) if 'min' in str(row['Durée en cours']) else [''] * len(row),
@@ -85,19 +84,66 @@ if selected_client_id:
             )
             
             st.dataframe(styled, use_container_width=True, hide_index=True)
-            
-            total_live = len(df_global)
-            st.metric("📞 TOTAL appels en cours (tous clients confondus)", total_live, 
-                     delta="Attention ! Plusieurs appels simultanés" if total_live > 3 else None)
-            
-            if st.button("🛑 Rafraîchir maintenant", type="primary"):
-                st.rerun()
-                
+            st.metric("📞 TOTAL appels en cours (tous clients)", len(df_global))
         else:
-            st.success("✅ Aucun appel en cours pour aucun client. Tout est calme dans l’empire Amélie ! 😌")
-            st.caption("Le dashboard global se met à jour tout seul quand quelqu’un appelle.")
+            st.success("✅ Aucun appel en cours. Tout est calme dans l’empire Amélie ! 😌")
 
-            # ====================== TAB CONFIGURATION (identique à ta version) ======================
+        # ====================== STATS CUMULATIVES GLOBALES (FIX KeyError) ======================
+        st.divider()
+        st.subheader("📊 Statistiques cumulatives – Tous les clients")
+
+        stats_response = supabase.table('vw_stats_appels_clients').select('*').execute()
+        
+        if stats_response.data:
+            df_stats = pd.DataFrame(stats_response.data)
+            
+            # === FIX : on récupère les noms d'entreprise via get_clients() ===
+            clients_list = get_clients()
+            client_map = {c['id']: c.get('company_name', c['id']) for c in clients_list}
+            df_stats['company_name'] = df_stats['client_id'].map(client_map).fillna('Inconnu')
+
+            # Calculs globaux
+            total_appels = int(df_stats['total_appels'].sum())
+            completes = int(df_stats['appels_completes'].sum())
+            rdv_reserves = int(df_stats['rdv_reserves'].sum())
+            duree_moyenne = round(df_stats['duree_moyenne_sec'].mean(), 1) if not df_stats.empty else 0
+
+            # Comptes spéciaux
+            abandoned_resp = supabase.table('vw_appels_clients').select("*", count="exact").eq('status', 'abandoned').execute()
+            confirmed_resp = supabase.table('vw_appels_clients').select("*", count="exact").eq('appointment_confirmed', True).execute()
+            cancelled_resp = supabase.table('vw_appels_clients').select("*", count="exact").eq('appointment_cancelled', True).execute()
+
+            appels_abandonnes = abandoned_resp.count or 0
+            rdv_confirmes = confirmed_resp.count or 0
+            rdv_annules = cancelled_resp.count or 0
+
+            # Métriques
+            col1, col2, col3, col4, col5, col6, col7 = st.columns(7)
+            with col1: st.metric("📞 Total appels", total_appels)
+            with col2: st.metric("✅ Complétés", completes)
+            with col3: st.metric("📅 RDV réservés", rdv_reserves)
+            with col4: st.metric("⏱️ Durée moyenne", f"{duree_moyenne} s")
+            with col5: st.metric("📵 Abandonnés", appels_abandonnes)
+            with col6: st.metric("✅ RDV Confirmés", rdv_confirmes)
+            with col7: st.metric("❌ RDV Annulés", rdv_annules)
+
+            # Tableau récap par client + ligne TOTAL
+            df_stats_display = df_stats[['company_name', 'total_appels', 'appels_completes', 'rdv_reserves', 'duree_moyenne_sec']].copy()
+            df_stats_display = df_stats_display.rename(columns={
+                'company_name': 'Client',
+                'total_appels': 'Total appels',
+                'appels_completes': 'Complétés',
+                'rdv_reserves': 'RDV réservés',
+                'duree_moyenne_sec': 'Durée moy. (s)'
+            })
+            df_stats_display.loc[len(df_stats_display)] = ['TOTAL', total_appels, completes, rdv_reserves, duree_moyenne]
+            
+            st.dataframe(df_stats_display.style.set_properties(subset=['Client'], **{'font-weight': 'bold'}), 
+                        use_container_width=True, hide_index=True)
+        else:
+            st.info("Aucune statistique disponible pour le moment.")
+                        
+    # ====================== TAB CONFIGURATION (identique à ta version) ======================
     with tab_config:
         st.subheader(f"Paramètres pour {selected_client_id}")
         
