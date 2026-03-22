@@ -47,7 +47,7 @@ if selected_client_id:
 
     # ====================== TAB DASHBOARD GLOBAL (avec stats cumulatives – CORRIGÉ) ======================
     with tab_global:
-        st.subheader("🌍 Dashboard Global – Tous les clients Amélie")
+        st.subheader("🌍 Dashboard Global – Tous les clients")
         
         auto_refresh = st.toggle("🔄 Rafraîchissement automatique toutes les 5 secondes", 
                                 value=True, key="global_refresh")
@@ -88,6 +88,36 @@ if selected_client_id:
         else:
             st.success("✅ Aucun appel en cours. Tout est calme dans l’empire Amélie ! 😌")
 
+        # ====================== DERNIER APPEL REÇU (GLOBAL) ======================
+        st.divider()
+        st.subheader("🕒 Dernier appel reçu – Tous les clients")
+
+        latest_response = supabase.table('vw_appels_clients') \
+            .select('started_at, company_name, caller_number, status_label') \
+            .order('started_at', desc=True) \
+            .limit(1) \
+            .execute()
+
+        if latest_response.data:
+            last = latest_response.data[0]
+            
+            tz_montreal = pytz.timezone('America/Montreal')
+            last_time = pd.to_datetime(last['started_at'])
+            if last_time.tz is None:
+                last_time = last_time.tz_localize('UTC')
+            last_time = last_time.tz_convert(tz_montreal)
+            
+            formatted_time = last_time.strftime("%d %B %Y à %H:%M:%S")
+            
+            st.metric(
+                label="🕒 Dernier appel reçu",
+                value=formatted_time,
+                delta=f"{last.get('company_name', 'Inconnu')} • {last.get('caller_number', 'N/A')}"
+            )
+            st.caption(f"**Statut :** {last.get('status_label', '—')}")
+        else:
+            st.info("Aucun appel enregistré pour le moment.")
+            
         # ====================== STATS CUMULATIVES GLOBALES (FIX KeyError) ======================
         st.divider()
         st.subheader("📊 Statistiques cumulatives – Tous les clients")
