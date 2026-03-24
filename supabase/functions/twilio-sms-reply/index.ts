@@ -10,12 +10,7 @@ const twilioSid = Deno.env.get('TWILIO_ACCOUNT_SID')
 const twilioToken = Deno.env.get('TWILIO_AUTH_TOKEN')
 const fromNumber = Deno.env.get('TWILIO_FROM_NUMBER')
 
-// ←←← REMPLACE CES DEUX LIGNES PAR TES VRAIES VALEURS
-const GOOGLE_CLIENT_ID     = "75518740155-nvrj65gv3rk35lnf1fe668lvq2rgik76.apps.googleusercontent.com"
-const GOOGLE_CLIENT_SECRET = "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"
-
-// ==================== FLAG DE DEBUG ====================
-const DEBUG_MODE = false;   // ← Mets false quand tu ne veux plus voir le JSON
+const DEBUG_MODE = false;   // ← Mets à false quand tu ne veux plus voir le debug
 
 serve(async (req) => {
   const debug: any = {
@@ -29,10 +24,6 @@ serve(async (req) => {
     action: "aucune",
     confirmed: false,
     cancelled: false,
-    deleted_from_google: false,
-    token_status: 0,
-    delete_status: 0,
-    google_error: "",
     sms_sent: false
   }
 
@@ -44,9 +35,10 @@ serve(async (req) => {
     const rawFrom = form.From?.toString() || ''
     const bodyMsg = (form.Body?.toString() || '').toUpperCase().trim()
 
+    // Nettoyage ultra-robuste du numéro entrant
     let clean = rawFrom.replace(/\D/g, '')
     if (clean.startsWith('1') && clean.length === 11) clean = clean.substring(1)
-    const cleanNumber = clean
+    const cleanNumber = clean   // ex: 5149474976
 
     debug.received = 1
     debug.bodyMsg = bodyMsg
@@ -54,10 +46,11 @@ serve(async (req) => {
     debug.cleanNumber = cleanNumber
     debug.triedNumbers = [cleanNumber, `+1${cleanNumber}`, `1${cleanNumber}`, `+${cleanNumber}`]
 
+    // Recherche plus permissive (on cherche aussi les numéros sans +1)
     const { data: results } = await supabase
       .from('appels')
-      .select(`id, google_event_id, appointment_name, appointment_number, caller_number, clients!inner(google_refresh_token, calendar_id, company_name)`)
-      .or(`appointment_number.in.(${debug.triedNumbers.join(',')}),caller_number.in.(${debug.triedNumbers.join(',')})`)
+      .select(`id, google_event_id, appointment_name, appointment_number, caller_number`)
+      .or(`appointment_number.ilike.%${cleanNumber}%,caller_number.ilike.%${cleanNumber}%`)
       .eq('appointment_booked', true)
       .is('appointment_confirmed', false)
       .is('appointment_cancelled', false)
@@ -67,27 +60,35 @@ serve(async (req) => {
     debug.rdv_found = !!rdv
     debug.rdv_id = rdv ? rdv.id : null
 
-    // ... (le reste de ta logique OUI / NON reste IDENTIQUE) ...
-    if (bodyMsg.includes('OUI') || bodyMsg.includes('YES')) {
+    if (bodyMsg.includes('OUI') || bodyMsg.includes('YES') || bodyMsg.includes('CONFIRME')) {
       debug.action = "confirmation"
-      await supabase.from('appels').update({ appointment_confirmed: true }).eq('id', rdv.id)
-      debug.confirmed = true
-      await sendTwilioSms(rawFrom, `✅ Parfait ${rdv.appointment_name || ''} ! Votre rendez-vous est confirmé...`)
-      debug.sms_sent = true
+      if (rdv) {
+        await supabase.from('appels')
+          .update({ appointment_confirmed: true })
+          .eq('id', rdv.id)
+        debug.confirmed = true
+
+        await sendTwilioSms(rawFrom, `✅ Parfait ${rdv.appointment_name || ''} ! Votre rendez-vous est maintenant CONFIRMÉ. Merci !`)
+        debug.sms_sent = true
+      }
     } 
     else if (bodyMsg.includes('NON') || bodyMsg.includes('NO') || bodyMsg.includes('ANNULER')) {
       debug.action = "annulation"
-      // ... ton code Google + update cancelled ...
-      debug.cancelled = true
-      await sendTwilioSms(rawFrom, `😔 Merci pour votre réponse. Votre rendez-vous a été annulé...`)
-      debug.sms_sent = true
+      if (rdv) {
+        await supabase.from('appels')
+          .update({ appointment_cancelled: true })
+          .eq('id', rdv.id)
+        debug.cancelled = true
+
+        await sendTwilioSms(rawFrom, `😔 Votre rendez-vous a été annulé. Merci pour votre réponse.`)
+        debug.sms_sent = true
+      }
     }
 
   } catch (e) {
     debug.catch_error = e.message
   }
 
-  // ==================== RETOUR FINAL ====================
   if (DEBUG_MODE) {
     return new Response(JSON.stringify(debug, null, 2), { status: 200 })
   } else {
@@ -99,6 +100,10 @@ async function sendTwilioSms(to: string, message: string) {
   await fetch(`https://api.twilio.com/2010-04-01/Accounts/${twilioSid}/Messages.json`, {
     method: 'POST',
     headers: { 'Authorization': 'Basic ' + btoa(`${twilioSid}:${twilioToken}`) },
-    body: new URLSearchParams({ To: to.startsWith('+') ? to : `+1${to}`, From: fromNumber, Body: message })
+    body: new URLSearchParams({ 
+      To: to.startsWith('+') ? to : `+1${to}`, 
+      From: fromNumber, 
+      Body: message 
+    })
   })
 }
