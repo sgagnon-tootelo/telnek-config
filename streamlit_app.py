@@ -7,6 +7,7 @@ import pytz
 from google_auth_oauthlib.flow import InstalledAppFlow
 import requests
 from streamlit_autorefresh import st_autorefresh
+import plotly.express as px
 
 # ==================== CONNEXION SUPABASE ====================
 supabase_url = st.secrets["SUPABASE_URL"]
@@ -470,72 +471,120 @@ if selected_client_id:
         else:
             st.info("Aucun appel enregistré pour le moment.")
 
-    # ====================== TAB STATISTIQUES – Appels abandonnés + RDV confirmés/annulés ======================
-    with tab_stats:
-        st.subheader(f"📊 Statistiques – {selected_client_id}")
+# ====================== TAB STATISTIQUES – VERSION OPTIMISÉE + TRANSFERTS & MESSAGES ======================
+with tab_stats:
+    st.subheader(f"📊 Statistiques détaillées – {selected_client_id}")
+    
+    # 1. Métriques rapides depuis la vue agrégée
+    stats_response = supabase.table('vw_stats_appels_clients') \
+        .select('*') \
+        .eq('client_id', selected_client_id) \
+        .execute()
+    
+    if stats_response.data and len(stats_response.data) > 0:
+        stats_df = pd.DataFrame(stats_response.data).iloc[0]
         
-        stats_response = supabase.table('vw_stats_appels_clients') \
+        total = int(stats_df['total_appels'])
+        completes = int(stats_df['appels_completes'])
+        booked = int(stats_df['rdv_reserves'])
+        confirmed = int(stats_df.get('rdv_confirmes', 0))
+        cancelled = int(stats_df.get('rdv_annules', 0))
+        duree_moy = float(stats_df['duree_moyenne_sec'])
+        pourcent_rdv = float(stats_df['pourcentage_rdv'])
+        
+        taux_confirmation = (confirmed / (confirmed + cancelled) * 100) if (confirmed + cancelled) > 0 else 0
+        appels_abandonnes = total - completes
+        taux_abandon = (appels_abandonnes / total * 100) if total > 0 else 0
+
+        # ====================== NOUVELLES MÉTRIQUES : TRANSFERTS & MESSAGES ======================
+        # On va chercher les détails seulement pour ces nouveaux calculs + graphiques
+        appels_response = supabase.table('vw_appels_clients') \
             .select('*') \
             .eq('client_id', selected_client_id) \
             .execute()
         
-        if stats_response.data and len(stats_response.data) > 0:
-            stats_df = pd.DataFrame(stats_response.data)
-            
-            total = int(stats_df['total_appels'].iloc[0])
-            completes = int(stats_df['appels_completes'].iloc[0])
-            
-            # ====================== NOUVEAUX COMPTES CONFIRMÉS / ANNULÉS ======================
-            abandoned_response = supabase.table('vw_appels_clients') \
-                .select("*", count="exact") \
-                .eq('client_id', selected_client_id) \
-                .eq('status', 'abandoned') \
-                .execute()
-            
-            confirmed_response = supabase.table('vw_appels_clients') \
-                .select("*", count="exact") \
-                .eq('client_id', selected_client_id) \
-                .eq('appointment_confirmed', True) \
-                .execute()
+        transferred = 0
+        transferred_success = 0
+        messages_pris = 0
+        
+        if appels_response.data:
+            df_detail = pd.DataFrame(appels_response.data)
+            transferred = len(df_detail[df_detail['transfer_attempted'] == True])
+            transferred_success = len(df_detail[df_detail['transfer_success'] == True])
+            messages_pris = len(df_detail[df_detail['message_taken'] == True])
 
-            cancelled_response = supabase.table('vw_appels_clients') \
-                .select("*", count="exact") \
-                .eq('client_id', selected_client_id) \
-                .eq('appointment_cancelled', True) \
-                .execute()
+        # Métriques (maintenant 2 rangées pour rester beau)
+        col1, col2, col3, col4, col5, col6, col7, col8 = st.columns(8)
+        with col1: st.metric("📞 Total appels", total)
+        with col2: st.metric("✅ Complétés", completes)
+        with col3: st.metric("📅 RDV réservés", booked, delta=f"{pourcent_rdv:.1f}%")
+        with col4: st.metric("✅ RDV confirmés", confirmed)
+        with col5: st.metric("❌ RDV annulés", cancelled)
+        with col6: st.metric("📵 Abandonnés", appels_abandonnes, delta=f"{taux_abandon:.1f}%")
+        with col7: st.metric("⏱️ Durée moyenne", f"{duree_moy:.1f} s")
+        with col8: st.metric("🎯 Taux confirmation RDV", f"{taux_confirmation:.1f}%")
 
-            appels_abandonnes = abandoned_response.count or 0
-            rdv_confirmes = confirmed_response.count or 0
-            rdv_annules = cancelled_response.count or 0
+        # Deuxième rangée pour les nouveaux stats
+        st.divider()
+        colA, colB, colC, colD = st.columns(4)
+        with colA: st.metric("🔄 Appels transférés (tentés)", transferred)
+        with colB: st.metric("✅ Transferts réussis", transferred_success, 
+                            delta=f"{(transferred_success / transferred * 100) if transferred > 0 else 0:.1f}%")
+        with colC: st.metric("📩 Messages pris", messages_pris)
+        with colD: st.metric("📞 Appels normaux", total - transferred - messages_pris)
 
-            total_rdv_repondus = rdv_confirmes + rdv_annules
-            taux_confirmation = (rdv_confirmes / total_rdv_repondus * 100) if total_rdv_repondus > 0 else 0
+        st.caption(f"**Funnel :** {total} appels → {booked} RDV → {confirmed} confirmés | {transferred} transférés | {messages_pris} messages")
 
-            # Métriques (8 colonnes)
-            col1, col2, col3, col4, col5, col6, col7, col8 = st.columns(8)
-            with col1: 
-                st.metric("📞 Total appels", total)
-            with col2: 
-                st.metric("✅ Appels complétés", completes)
-            with col3: 
-                st.metric("📅 RDV réservés", int(stats_df['rdv_reserves'].iloc[0]))
-            with col4: 
-                st.metric("% avec RDV", f"{stats_df['pourcentage_rdv'].iloc[0]:.1f}%")
-            with col5: 
-                st.metric("⏱️ Durée moyenne", f"{stats_df['duree_moyenne_sec'].iloc[0]:.1f} s")
-            with col6: 
-                st.metric("📵 Appels abandonnés", appels_abandonnes)
-            with col7: 
-                st.metric("✅ RDV Confirmés", rdv_confirmes)
-            with col8: 
-                st.metric("❌ RDV Annulés", rdv_annules,
-                          delta=f"{taux_confirmation:.1f}% confirmés" if total_rdv_repondus > 0 else None)
+        # ====================== GRAPHES PLOTLY ======================
+        st.divider()
+        st.subheader("📈 Visualisations")
 
-            # Taux d'abandon
-            pourcent_abandon = (appels_abandonnes / total * 100) if total > 0 else 0
-            st.caption(f"**Taux d'abandon : {pourcent_abandon:.1f}%** | **Taux de confirmation RDV : {taux_confirmation:.1f}%**")
+        col_g1, col_g2 = st.columns(2)
 
-            st.dataframe(stats_df, use_container_width=True, hide_index=True)
-        else:
-            st.info("Aucune statistique disponible pour ce client.")
+        # Pie : Répartition Transfert / Message / Normal
+        with col_g1:
+            repartition = pd.DataFrame({
+                "Type": ["Appels normaux", "Appels transférés", "Messages pris"],
+                "Nombre": [total - transferred - messages_pris, transferred, messages_pris]
+            })
+            fig_pie = px.pie(repartition, values="Nombre", names="Type",
+                           title="Répartition des types d'appels",
+                           color_discrete_sequence=px.colors.sequential.Blues)
+            st.plotly_chart(fig_pie, use_container_width=True)
 
+        # Bar : Top motifs de RDV (comme avant)
+        with col_g2:
+            if appels_response.data and 'appointment_reason' in df_detail.columns:
+                reasons = df_detail[df_detail['appointment_booked'] == True]['appointment_reason'].value_counts().head(8)
+                fig_bar = px.bar(x=reasons.index, y=reasons.values,
+                               labels={"x": "Motif du RDV", "y": "Nombre"},
+                               title="Top 8 des motifs de rendez-vous")
+                st.plotly_chart(fig_bar, use_container_width=True)
+
+        # ====================== TABLEAU DÉTAILLÉ (ajout colonnes transfert & message) ======================
+        st.divider()
+        st.subheader("📋 Détail par appel")
+        
+        df_display = df_detail[['call_date', 'call_time', 'caller_number', 'status',
+                               'transfer_attempted', 'transfer_success', 'message_taken',
+                               'appointment_booked', 'appointment_confirmed', 'appointment_reason']].copy()
+        
+        def color_row(row):
+            if row['appointment_confirmed']:
+                return ['background-color: #d4edda'] * len(row)
+            elif row['appointment_cancelled']:
+                return ['background-color: #f8d7da'] * len(row)
+            elif row['transfer_success'] is True:
+                return ['background-color: #fff3cd'] * len(row)
+            return [''] * len(row)
+        
+        styled = df_display.style.apply(color_row, axis=1)
+        st.dataframe(styled, use_container_width=True, hide_index=True)
+
+        # Export CSV
+        csv = df_detail.to_csv(index=False).encode('utf-8')
+        st.download_button("📥 Télécharger tout en CSV", csv, 
+                         f"stats_detaillees_{selected_client_id}.csv", "text/csv")
+    
+    else:
+        st.info("Aucune statistique disponible pour ce client pour l’instant.")
