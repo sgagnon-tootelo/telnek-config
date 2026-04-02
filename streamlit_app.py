@@ -471,7 +471,7 @@ if selected_client_id:
         else:
             st.info("Aucun appel enregistré pour le moment.")
 
-# ====================== TAB STATISTIQUES – VERSION OPTIMISÉE + TRANSFERTS & MESSAGES ======================
+# ====================== TAB STATISTIQUES – VERSION OPTIMISÉE + TRANSFERTS & MESSAGES (CORRIGÉE) ======================
 with tab_stats:
     st.subheader(f"📊 Statistiques détaillées – {selected_client_id}")
     
@@ -497,7 +497,6 @@ with tab_stats:
         taux_abandon = (appels_abandonnes / total * 100) if total > 0 else 0
 
         # ====================== NOUVELLES MÉTRIQUES : TRANSFERTS & MESSAGES ======================
-        # On va chercher les détails seulement pour ces nouveaux calculs + graphiques
         appels_response = supabase.table('vw_appels_clients') \
             .select('*') \
             .eq('client_id', selected_client_id) \
@@ -513,7 +512,7 @@ with tab_stats:
             transferred_success = len(df_detail[df_detail['transfer_success'] == True])
             messages_pris = len(df_detail[df_detail['message_taken'] == True])
 
-        # Métriques (maintenant 2 rangées pour rester beau)
+        # Métriques (2 rangées)
         col1, col2, col3, col4, col5, col6, col7, col8 = st.columns(8)
         with col1: st.metric("📞 Total appels", total)
         with col2: st.metric("✅ Complétés", completes)
@@ -524,7 +523,6 @@ with tab_stats:
         with col7: st.metric("⏱️ Durée moyenne", f"{duree_moy:.1f} s")
         with col8: st.metric("🎯 Taux confirmation RDV", f"{taux_confirmation:.1f}%")
 
-        # Deuxième rangée pour les nouveaux stats
         st.divider()
         colA, colB, colC, colD = st.columns(4)
         with colA: st.metric("🔄 Appels transférés (tentés)", transferred)
@@ -541,7 +539,6 @@ with tab_stats:
 
         col_g1, col_g2 = st.columns(2)
 
-        # Pie : Répartition Transfert / Message / Normal
         with col_g1:
             repartition = pd.DataFrame({
                 "Type": ["Appels normaux", "Appels transférés", "Messages pris"],
@@ -552,7 +549,6 @@ with tab_stats:
                            color_discrete_sequence=px.colors.sequential.Blues)
             st.plotly_chart(fig_pie, use_container_width=True)
 
-        # Bar : Top motifs de RDV (comme avant)
         with col_g2:
             if appels_response.data and 'appointment_reason' in df_detail.columns:
                 reasons = df_detail[df_detail['appointment_booked'] == True]['appointment_reason'].value_counts().head(8)
@@ -561,20 +557,22 @@ with tab_stats:
                                title="Top 8 des motifs de rendez-vous")
                 st.plotly_chart(fig_bar, use_container_width=True)
 
-        # ====================== TABLEAU DÉTAILLÉ (ajout colonnes transfert & message) ======================
+        # ====================== TABLEAU DÉTAILLÉ (CORRIGÉ) ======================
         st.divider()
         st.subheader("📋 Détail par appel")
         
+        # ← AJOUT DE LA COLONNE QUI MANQUAIT
         df_display = df_detail[['call_date', 'call_time', 'caller_number', 'status',
                                'transfer_attempted', 'transfer_success', 'message_taken',
-                               'appointment_booked', 'appointment_confirmed', 'appointment_reason']].copy()
+                               'appointment_booked', 'appointment_confirmed', 'appointment_cancelled',
+                               'appointment_reason']].copy()
         
         def color_row(row):
-            if row['appointment_confirmed']:
+            if row.get('appointment_confirmed', False):
                 return ['background-color: #d4edda'] * len(row)
-            elif row['appointment_cancelled']:
+            elif row.get('appointment_cancelled', False):
                 return ['background-color: #f8d7da'] * len(row)
-            elif row['transfer_success'] is True:
+            elif row.get('transfer_success', False) is True:
                 return ['background-color: #fff3cd'] * len(row)
             return [''] * len(row)
         
