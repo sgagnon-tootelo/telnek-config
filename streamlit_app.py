@@ -406,7 +406,7 @@ if selected_client_id:
                 return [''] * len(row)
             
             styled_df = df[available_cols].style.apply(highlight_rdv, axis=1)
-            styled_df = styled_df.applymap(color_rdv_status, subset=['statut_rdv'])
+            styled_df = styled_df.map(color_rdv_status, subset=['statut_rdv'])
             
             st.caption("👇 Clique sur une ligne pour afficher la transcription + écouter l’enregistrement")
             event = st.dataframe(
