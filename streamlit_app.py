@@ -204,7 +204,26 @@ with tab_config:
         closing_hour = st.number_input("🕒 Heure de fermeture (1-24)", 
                                      value=client.get('closing_hour', 17), min_value=1, max_value=24, step=1)
 
-    admin_phone = st.text_input("Numéro SMS (messages & transferts refusés)", value=client.get('admin_phone', ''))
+    # ====================== ADMIN PHONES (liste multiple – jsonb) ======================
+    st.subheader("📱 Numéros de réception des SMS")
+    st.caption("Entrez un ou plusieurs numéros de téléphone (un par ligne). Format recommandé : +1514...")
+
+    # Chargement de la liste actuelle
+    admin_phones_raw = client.get('admin_phones')
+    if isinstance(admin_phones_raw, list):
+        current_phones = "\n".join(str(p).strip() for p in admin_phones_raw if str(p).strip())
+    elif isinstance(admin_phones_raw, str) and admin_phones_raw.strip():
+        current_phones = admin_phones_raw
+    else:
+        current_phones = client.get('admin_phone', '')  # fallback temporaire sur l’ancienne colonne
+
+    admin_phones_edited = st.text_area(
+        "Numéros SMS (un par ligne)",
+        value=current_phones,
+        height=120,
+        help="Exemple :\n+15149474976\n+15145551234"
+    )
+    
     callee_number = st.text_input("Numéro de l'agent virtuel", value=client.get('callee_number', ''), disabled=True)
     
     instructions_specific = st.text_area("Instructions spécifiques de l'entreprise", 
@@ -330,13 +349,19 @@ with tab_config:
         else:
             transfer_numbers_parsed = client.get('transfer_numbers', {}) or {}
 
+        # === CONVERSION TEXTE → LISTE pour admin_phones ===
+        admin_phones_list = [
+            num.strip() for num in admin_phones_edited.splitlines()
+            if num.strip()
+        ]
+
         updated_data = {
             'company_name': company_name,
             'company_address': company_address,
             'company_hours': company_hours,
             'opening_hour': opening_hour,
             'closing_hour': closing_hour,
-            'admin_phone': admin_phone,
+            'admin_phones': admin_phones_list,
             'instructions_specific': instructions_specific,
             'base_url': base_url,
             'url_map': url_map_parsed,
