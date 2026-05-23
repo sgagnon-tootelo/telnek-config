@@ -308,6 +308,7 @@ with tab_config:
     voice_value = selected_voice["value"]
 
     # Mode de transfert
+    st.subheader("Mode de transfert")
     transfer_mode_options = [
         {"value": "blind", "label": "Blind – Transfert immédiat"},
         {"value": "warm",  "label": "Warm  – Transfert supervisé"},
