@@ -246,19 +246,66 @@ with tab_config:
 
     agent_name = st.text_input("Nom de l'agent", value=client.get('agent_name', 'Amélie'))
     
-    # Voix
-    voice_options = [
-        {"value": "ara", "label": "Ara – Féminine, chaleureuse (défaut)"},
-        {"value": "eve", "label": "Eve – Féminine énergique"},
-        {"value": "leo", "label": "Leo – Masculin autoritaire"},
-        {"value": "rex", "label": "Rex – Masculin professionnel"},
-        {"value": "sal", "label": "Sal – Neutre polyvalent"}
+    # ====================== TTS PROVIDER + VOIX DYNAMIQUES ======================
+    st.subheader("🗣️ Voix de l'agent virtuel")
+
+    # Chargement dynamique des voix depuis Supabase
+    voices_response = supabase.table('voices') \
+        .select('*') \
+        .eq('is_active', True) \
+        .order('sort_order') \
+        .execute()
+
+    all_voices = voices_response.data or []
+
+    # Grouper par fournisseur
+    grok_voices = [v for v in all_voices if v['provider'] == 'grok']
+    eleven_voices = [v for v in all_voices if v['provider'] == 'elevenlabs']
+
+    # Choix du fournisseur de TTS
+    tts_provider_options = [
+        {"value": "xai", "label": "Grok Realtime (voix natives)"},
+        {"value": "elevenlabs", "label": "ElevenLabs (qualité HD – recommandé pour Amélie)"}
     ]
-    current_voice = client.get('voice_name', 'ara')
-    default_index = next((i for i, opt in enumerate(voice_options) if opt["value"] == current_voice), 0)
-    selected_voice = st.selectbox("Voix de l'agent", options=voice_options, 
-                                  format_func=lambda x: x["label"], index=default_index)
-    voice_name = selected_voice["value"]
+
+    current_tts = client.get('tts_provider', 'xai')
+    default_tts_index = next((i for i, opt in enumerate(tts_provider_options) if opt["value"] == current_tts), 0)
+
+    selected_tts = st.selectbox(
+        "Fournisseur de voix",
+        options=tts_provider_options,
+        format_func=lambda x: x["label"],
+        index=default_tts_index
+    )
+    tts_provider_selected = selected_tts["value"]
+
+    # Liste des voix selon le fournisseur choisi
+    if tts_provider_selected == "xai":
+        voice_list = grok_voices
+    else:
+        voice_list = eleven_voices
+
+    voice_options = [
+        {"value": v['voice_key'], "label": v['display_label']}
+        for v in voice_list
+    ]
+
+    # Valeur actuelle
+    current_voice_key = client.get(
+        'voice_name' if tts_provider_selected == "xai" else 'elevenlabs_voice_id', 
+        voice_options[0]['value'] if voice_options else ""
+    )
+
+    default_voice_index = next((i for i, opt in enumerate(voice_options) if opt["value"] == current_voice_key), 0)
+
+    selected_voice = st.selectbox(
+        "Voix spécifique",
+        options=voice_options,
+        format_func=lambda x: x["label"],
+        index=default_voice_index
+    )
+
+    voice_value = selected_voice["value"]
 
     # Mode de transfert
     transfer_mode_options = [
@@ -366,7 +413,9 @@ with tab_config:
             'base_url': base_url,
             'url_map': url_map_parsed,
             'agent_name': agent_name,
-            'voice_name': voice_name,
+            'tts_provider': tts_provider_selected,
+            'voice_name': voice_value if tts_provider_selected == "xai" else client.get('voice_name', 'ara'),
+            'elevenlabs_voice_id': voice_value if tts_provider_selected == "elevenlabs" else None,
             'transfer_mode': transfer_mode_selected,
             'transfer_numbers': transfer_numbers_parsed,
             'get_caller_history_flag': get_caller_history_flag,
