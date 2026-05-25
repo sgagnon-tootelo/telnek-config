@@ -664,11 +664,30 @@ with tab_stats:
         st.divider()
         st.subheader("📋 Détail par appel")
         
-        df_display = df_detail[['call_date', 'call_time', 'caller_number', 'status',
+        # === NOUVEAU : Choix du tri ===
+        sort_option = st.selectbox(
+            "Trier les appels par date",
+            options=["Les plus récents d'abord", "Les plus anciens d'abord"],
+            index=0,
+            key=f"stats_sort_{selected_client_id}"
+        )
+        
+        # Tri du dataframe (on travaille sur une copie pour ne pas affecter les calculs précédents)
+        df_sorted = df_detail.copy()
+        
+        if not df_sorted.empty and 'started_at' in df_sorted.columns:
+            df_sorted['started_at'] = pd.to_datetime(df_sorted['started_at'], errors='coerce')
+            ascending = sort_option == "Les plus anciens d'abord"
+            df_sorted = df_sorted.sort_values(by='started_at', ascending=ascending).reset_index(drop=True)
+        elif not df_sorted.empty:
+            # Fallback si started_at n'existe pas
+            df_sorted = df_sorted.sort_values(by=['call_date', 'call_time'], ascending=False)
+        
+        # Préparation du tableau d'affichage
+        df_display = df_sorted[['call_date', 'call_time', 'caller_number', 'status',
                                'transfer_attempted', 'transfer_success', 'message_taken',
                                'appointment_booked', 'appointment_confirmed', 'appointment_cancelled',
-                               'appointment_reason']].copy()
-        
+                               'appointment_reason']].copy()        
         def color_row(row):
             if row.get('appointment_confirmed', False):
                 return ['background-color: #d4edda'] * len(row)
