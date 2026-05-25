@@ -8,6 +8,7 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 import requests
 from streamlit_autorefresh import st_autorefresh
 import plotly.express as px
+from datetime import datetime, timedelta
 
 # ==================== CONNEXION SUPABASE ====================
 supabase_url = st.secrets["SUPABASE_URL"]
@@ -57,9 +58,11 @@ if selected_client_id:
             st_autorefresh(interval=5000, limit=300, key="global_auto")
 
         # ====================== APPELS EN COURS (live) ======================
+        # === MODIFICATION : on filtre les appels récents seulement ===
         live_response = supabase.table('vw_appels_clients') \
             .select('client_id, company_name, call_date, call_time, caller_number, room_name, status_label, started_at') \
             .eq('status', 'in_progress') \
+            .gte('started_at', (datetime.now(pytz.utc) - timedelta(minutes=90)).isoformat()) \
             .order('started_at', desc=True) \
             .execute()
         
