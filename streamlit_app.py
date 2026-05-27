@@ -26,15 +26,26 @@ def update_client(client_id, data):
 st.set_page_config(page_title="Amélie - Telnek AI", page_icon="📞", layout="wide")
 st.title("📞 Telnek – Réceptioniste IA")
 
-# Sélection du client
+# ==================== SÉLECTION DU CLIENT - VERSION STABLE ====================
 clients = get_clients()
+
 if not clients:
     st.error("Aucun client trouvé.")
     st.stop()
 
-clients_sorted = sorted(clients, key=lambda c: c['id'].lower())
-client_options = {c['id']: c['id'] for c in clients_sorted}
-selected_client_id = st.selectbox("Sélectionnez un client", list(client_options.keys()))
+# Tri stable par ID
+clients_sorted = sorted(clients, key=lambda c: c.get('id', '').lower())
+
+# Liste simple des IDs (plus sûr que le dictionnaire)
+client_ids = [c['id'] for c in clients_sorted if c.get('id')]
+
+# Sélection avec une clé fixe → ça règle le bug
+selected_client_id = st.selectbox(
+    "Sélectionnez un client",
+    options=client_ids,
+    key="main_client_selector",          # ← C’est la ligne qui change tout
+    index=client_ids.index(selected_client_id) if 'selected_client_id' in locals() and selected_client_id in client_ids else 0
+)
 
 if selected_client_id:
     client = next(c for c in clients if c['id'] == selected_client_id)
