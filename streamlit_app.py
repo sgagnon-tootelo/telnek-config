@@ -24,7 +24,7 @@ def update_client(client_id, data):
 
 # ==================== INTERFACE ====================
 st.set_page_config(page_title="Amélie - Telnek AI", page_icon="📞", layout="wide")
-st.title("📞 Telnek – AI Agent de Réception Virtuel")
+st.title("📞 Telnek – Réceptioniste IA")
 
 # Sélection du client
 clients = get_clients()
