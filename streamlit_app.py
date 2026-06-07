@@ -66,21 +66,7 @@ if selected_client_id:
                                 value=True, key="global_refresh")
         
         if auto_refresh:
-            try:
-                st_autorefresh(interval=5000, limit=300, key="global_auto")
-            except Exception:
-                # Fallback robuste : le composant streamlit_autorefresh a parfois des problèmes
-                # de chargement des assets frontend sur Streamlit Cloud. Cette méthode alternative
-                # assure que le tableau de bord reste fonctionnel.
-                st.warning(
-                    "⚠️ Le rafraîchissement automatique avancé rencontre une difficulté technique temporaire. "
-                    "L'application utilise maintenant une méthode alternative (rafraîchissement complet toutes les 5 secondes).",
-                    icon="🔄"
-                )
-                st.markdown(
-                    '<meta http-equiv="refresh" content="5">',
-                    unsafe_allow_html=True
-                )
+            st_autorefresh(interval=5000, limit=300, key="global_auto")
 
         # ====================== APPELS EN COURS (live) ======================
         # === MODIFICATION : on filtre les appels récents seulement ===
@@ -274,7 +260,7 @@ with tab_config:
 
     agent_name = st.text_input("Nom de l'agent", value=client.get('agent_name', 'Amélie'))
     
-    # ====================== TTS PROVIDER + VOIX DYNAMIQUES ======================
+    # ====================== TTS PROVIDER + VOIX (Standard + Custom Voice xAI) ======================
     st.subheader("🗣️ Voix de l'agent virtuel")
 
     # Chargement dynamique des voix depuis Supabase
@@ -286,54 +272,59 @@ with tab_config:
 
     all_voices = voices_response.data or []
 
-    # Grouper par fournisseur
     grok_voices = [v for v in all_voices if v['provider'] == 'grok']
     eleven_voices = [v for v in all_voices if v['provider'] == 'elevenlabs']
 
-    # Choix du fournisseur de TTS
     tts_provider_options = [
-        {"value": "xai", "label": "Grok Realtime (voix natives)"},
-        {"value": "elevenlabs", "label": "ElevenLabs (qualité HD – recommandé pour Amélie)"}
+        {"value": "xai", "label": "Grok Realtime (voix natives + Custom Voices)"},
+        {"value": "elevenlabs", "label": "ElevenLabs (qualité HD)"}
     ]
 
     current_tts = client.get('tts_provider', 'xai')
     default_tts_index = next((i for i, opt in enumerate(tts_provider_options) if opt["value"] == current_tts), 0)
 
-    selected_tts = st.selectbox(
-        "Fournisseur de voix",
-        options=tts_provider_options,
-        format_func=lambda x: x["label"],
-        index=default_tts_index
-    )
+    selected_tts = st.selectbox("Fournisseur de voix", options=tts_provider_options,
+                                format_func=lambda x: x["label"], index=default_tts_index)
     tts_provider_selected = selected_tts["value"]
 
-    # Liste des voix selon le fournisseur choisi
+    # === GROK ===
     if tts_provider_selected == "xai":
-        voice_list = grok_voices
+        st.caption("📌 Grok Realtime supporte les Custom Voices xAI (depuis mai 2026)")
+
+        # Voix standard
+        voice_options = [{"value": v['voice_key'], "label": v['display_label']} for v in grok_voices]
+        current_voice_key = client.get('voice_name', voice_options[0]['value'] if voice_options else "ara")
+        default_voice_index = next((i for i, opt in enumerate(voice_options) if opt["value"] == current_voice_key), 0)
+
+        selected_voice = st.selectbox("Voix standard Grok", options=voice_options,
+                                      format_func=lambda x: x["label"], index=default_voice_index)
+
+        # Champ Custom Voice (sécurisé contre None)
+        grok_custom_raw = st.text_input(
+            "Voice ID personnalisée xAI (optionnel)",
+            value=client.get('grok_custom_voice_id', '') or "",
+            placeholder="ex: custom_abc123...",
+            help="Collez le voice_id créé dans la console xAI. S'il est rempli, il sera utilisé à la place de la voix standard."
+        )
+        grok_custom_voice_id = grok_custom_raw.strip() if grok_custom_raw else ""
+
+        # Priorité au custom
+        if grok_custom_voice_id:
+            voice_value = grok_custom_voice_id
+            st.success(f"✅ Custom Voice activée")
+        else:
+            voice_value = selected_voice["value"]
+
     else:
-        voice_list = eleven_voices
+        # === ElevenLabs ===
+        voice_options = [{"value": v['voice_key'], "label": v['display_label']} for v in eleven_voices]
+        current_voice_key = client.get('elevenlabs_voice_id', voice_options[0]['value'] if voice_options else "")
+        default_voice_index = next((i for i, opt in enumerate(voice_options) if opt["value"] == current_voice_key), 0)
 
-    voice_options = [
-        {"value": v['voice_key'], "label": v['display_label']}
-        for v in voice_list
-    ]
-
-    # Valeur actuelle
-    current_voice_key = client.get(
-        'voice_name' if tts_provider_selected == "xai" else 'elevenlabs_voice_id', 
-        voice_options[0]['value'] if voice_options else ""
-    )
-
-    default_voice_index = next((i for i, opt in enumerate(voice_options) if opt["value"] == current_voice_key), 0)
-
-    selected_voice = st.selectbox(
-        "Voix spécifique",
-        options=voice_options,
-        format_func=lambda x: x["label"],
-        index=default_voice_index
-    )
-
-    voice_value = selected_voice["value"]
+        selected_voice = st.selectbox("Voix ElevenLabs", options=voice_options,
+                                      format_func=lambda x: x["label"], index=default_voice_index)
+        voice_value = selected_voice["value"]
+        grok_custom_voice_id = ""
 
     # Mode de transfert
     st.subheader("Mode de transfert")
@@ -450,6 +441,7 @@ with tab_config:
             'tts_provider': tts_provider_selected,
             'voice_name': voice_value if tts_provider_selected == "xai" else client.get('voice_name', 'ara'),
             'elevenlabs_voice_id': voice_value if tts_provider_selected == "elevenlabs" else None,
+            'grok_custom_voice_id': grok_custom_voice_id if tts_provider_selected == "xai" else None,
             'transfer_mode': transfer_mode_selected,
             'transfer_numbers': transfer_numbers_parsed,
             'get_caller_history_flag': get_caller_history_flag,
