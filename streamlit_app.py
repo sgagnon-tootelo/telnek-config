@@ -477,27 +477,32 @@ with tab_config:
                             df.loc[mask, col] = df.loc[mask, col].dt.tz_localize('UTC')
                         df.loc[mask, col] = df.loc[mask, col].dt.tz_convert(tz_montreal)
                                     
-            # ====================== NOUVEAU : STATUT RDV ======================
-            def get_rdv_status(row):
-                if not row.get('appointment_booked', False):
-                    return "—"
-                elif row.get('appointment_cancelled', False):
-                    return "❌ Annulé"
-                elif row.get('appointment_confirmed', False):
-                    return "✅ Confirmé"
+            # ====================== NOUVELLE COLONNE "ISSUE / ACTION" ======================
+            def get_issue_label(row):
+                if row.get('appointment_booked'):
+                    return "📅 RDV réservé"
+                elif row.get('message_taken'):
+                    return "📩 Message laissé"
+                elif row.get('transfer_success'):
+                    return "🔄 Transféré"
+                elif row.get('status') == 'abandoned':
+                    return "❌ Abandonné"
                 else:
-                    return "⏳ À confirmer"
+                    return "✅ Terminé"
 
-            df['statut_rdv'] = df.apply(get_rdv_status, axis=1)
+            df['Issue / Action'] = df.apply(get_issue_label, axis=1)
 
-            def color_rdv_status(val):
-                if "Confirmé" in str(val):
-                    return 'background-color: #d4edda; color: #155724'
-                elif "Annulé" in str(val):
-                    return 'background-color: #f8d7da; color: #721c24'
-                elif "À confirmer" in str(val):
-                    return 'background-color: #fff3cd; color: #856404'
-                return ''
+            def color_issue(val):
+                if "RDV" in str(val):
+                    return 'background-color: #d4edda; color: #155724; font-weight: bold'
+                elif "Message" in str(val):
+                    return 'background-color: #cce5ff; color: #004085; font-weight: bold'
+                elif "Transféré" in str(val):
+                    return 'background-color: #fff3cd; color: #856404; font-weight: bold'
+                elif "Abandonné" in str(val):
+                    return 'background-color: #f8d7da; color: #721c24; font-weight: bold'
+                else:
+                    return 'background-color: #e2e3e5; color: #383d41'
 
             # Aperçu transcription + indicateur audio
             df['transcript_preview'] = df['transcript'].fillna('').astype(str).apply(
@@ -511,7 +516,7 @@ with tab_config:
             # Colonnes du tableau
             display_columns = [
                 'call_date', 'call_time', 'caller_number',
-                '🎧', 'status_label', 'statut_rdv',
+                '🎧', 'status_label', 'Issue / Action',
                 'appointment_start', 'appointment_name', 'duration_formatted',
                 'transcript_preview'
             ]
@@ -523,7 +528,7 @@ with tab_config:
                 return [''] * len(row)
             
             styled_df = df[available_cols].style.apply(highlight_rdv, axis=1)
-            styled_df = styled_df.map(color_rdv_status, subset=['statut_rdv'])
+            styled_df = styled_df.map(color_issue, subset=['Issue / Action'])
             
             st.caption("👇 Clique sur une ligne pour afficher la transcription + écouter l’enregistrement")
             event = st.dataframe(
