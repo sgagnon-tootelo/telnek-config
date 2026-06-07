@@ -492,6 +492,21 @@ with tab_config:
 
             df['Issue / Action'] = df.apply(get_issue_label, axis=1)
 
+            def get_detail(row):
+                if row.get('message_taken'):
+                    reason = str(row.get('message_reason') or "")
+                    return reason[:70] + "..." if len(reason) > 70 else reason
+                elif row.get('transfer_success'):
+                    dept = str(row.get('transfer_department') or "")
+                    number = str(row.get('transfer_to_number') or "")
+                    if dept and number:
+                        return f"{dept} ({number})"
+                    return dept or number
+                else:
+                    return "—"
+
+            df['Détail'] = df.apply(get_detail, axis=1)
+
             def color_issue(val):
                 if "RDV" in str(val):
                     return 'background-color: #d4edda; color: #155724; font-weight: bold'
@@ -516,7 +531,7 @@ with tab_config:
             # Colonnes du tableau
             display_columns = [
                 'call_date', 'call_time', 'caller_number',
-                '🎧', 'status_label', 'Issue / Action',
+                '🎧', 'status_label', 'Issue / Action', 'Détail',
                 'appointment_start', 'appointment_name', 'duration_formatted',
                 'transcript_preview'
             ]
