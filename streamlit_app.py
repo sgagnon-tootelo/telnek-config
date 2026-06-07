@@ -66,7 +66,21 @@ if selected_client_id:
                                 value=True, key="global_refresh")
         
         if auto_refresh:
-            st_autorefresh(interval=5000, limit=300, key="global_auto")
+            try:
+                st_autorefresh(interval=5000, limit=300, key="global_auto")
+            except Exception:
+                # Fallback robuste : le composant streamlit_autorefresh a parfois des problèmes
+                # de chargement des assets frontend sur Streamlit Cloud. Cette méthode alternative
+                # assure que le tableau de bord reste fonctionnel.
+                st.warning(
+                    "⚠️ Le rafraîchissement automatique avancé rencontre une difficulté technique temporaire. "
+                    "L'application utilise maintenant une méthode alternative (rafraîchissement complet toutes les 5 secondes).",
+                    icon="🔄"
+                )
+                st.markdown(
+                    '<meta http-equiv="refresh" content="5">',
+                    unsafe_allow_html=True
+                )
 
         # ====================== APPELS EN COURS (live) ======================
         # === MODIFICATION : on filtre les appels récents seulement ===

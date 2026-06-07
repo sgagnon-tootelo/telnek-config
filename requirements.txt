@@ -1,5 +1,5 @@
 streamlit
-streamlit-autorefresh
+streamlit-autorefresh>=0.0.3
 supabase
 google-api-python-client
 google-auth-oauthlib
