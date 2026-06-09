@@ -63,10 +63,10 @@ if selected_client_id:
         st.subheader("🌍 Dashboard Global – Tous les clients")
         
         auto_refresh = st.toggle("🔄 Rafraîchissement automatique toutes les 5 secondes", 
-                                value=True, key="global_refresh")
+                                value=True, key="global_refresh_top")
         
         if auto_refresh:
-            st_autorefresh(interval=5000, limit=300, key="global_auto")
+            st_autorefresh(interval=5000, limit=300, key="global_auto_top_level")
 
         # ====================== APPELS EN COURS (live) ======================
         # === MODIFICATION : on filtre les appels récents seulement ===
