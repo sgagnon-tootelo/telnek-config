@@ -10,14 +10,225 @@ from streamlit_autorefresh import st_autorefresh
 import plotly.express as px
 from datetime import datetime, timedelta
 
-# ==================== CONNEXION SUPABASE ====================
-supabase_url = st.secrets["SUPABASE_URL"]
-supabase_key = st.secrets["SUPABASE_KEY"]
-supabase: Client = create_client(supabase_url, supabase_key)
+# ==================== CONNEXION SUPABASE (avec gestion d'erreur conviviale) ====================
+def init_supabase():
+    """Initialise le client Supabase avec un message d'erreur clair si les secrets manquent."""
+    try:
+        supabase_url = st.secrets["SUPABASE_URL"]
+        supabase_key = st.secrets["SUPABASE_KEY"]
+        return create_client(supabase_url, supabase_key)
+    except Exception:
+        st.error("❌ **Fichier de secrets Streamlit manquant ou incomplet**", icon="🔐")
 
-# ==================== FONCTIONS HELPER ====================
+        st.markdown(r"""
+        L'application n'a pas pu lire les variables de configuration (`SUPABASE_URL`, etc.).
+
+        **Emplacements valides pour le fichier `secrets.toml` :**
+        1. **Recommandé (projet)** :  
+           `C:\Users\sylvain\.grok\worktrees\git-telnek-config\telnek-config\.streamlit\secrets.toml`
+        2. **Global (utilisateur)** :  
+           `C:\Users\sylvain\.streamlit\secrets.toml`
+        """)
+
+        st.subheader("Étapes pour corriger :")
+
+        st.markdown(r"""
+        1. Dans l'explorateur de fichiers, va dans le dossier du projet :
+           ```
+           C:\Users\sylvain\.grok\worktrees\git-telnek-config\telnek-config\
+           ```
+
+        2. Crée un **nouveau dossier** nommé exactement `.streamlit` (le point est important).
+
+        3. À l'intérieur de ce dossier `.streamlit`, crée un fichier texte nommé `secrets.toml`.
+
+        4. Colle dedans au minimum ceci (remplace par tes vraies valeurs) :
+        """)
+
+        st.code("""SUPABASE_URL = "https://ton-projet.supabase.co"
+SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+
+# Obligatoire pour la lecture des enregistrements audio dans l'onglet Historique
+TWILIO_ACCOUNT_SID = "ACxxxxxxxxxxxxxxxxxxxxxxxx"
+TWILIO_AUTH_TOKEN = "your_auth_token_ici"
+""", language="toml")
+
+        st.info("""
+        **Pour tester rapidement sans les vrais comptes :**
+        Ajoute dans `.streamlit/secrets.toml` :
+
+        DEV_BYPASS_AUTH = true
+        # Pour simuler un client restreint :
+        # DEV_BYPASS_ROLE = "client"
+        # DEV_BYPASS_CLIENT_ID = "un-vrai-client-id"
+
+        Laisse désactivé en utilisation normale.
+        """)
+
+        st.stop()
+
+supabase: Client = init_supabase()
+
+# ==================== AUTHENTIFICATION MULTI-UTILISATEUR (Supabase Auth + table profiles) ====================
+#
+# Table "profiles" (obligatoire) :
+#   id uuid primary key references auth.users
+#   email text
+#   role text ('admin' | 'client')
+#   client_id text (NULL pour admin, ou l'id exact d'un client pour les utilisateurs restreints)
+#
+# Règles appliquées :
+#   - role = 'admin'  → accès complet (tous les clients + dashboard global)
+#   - role = 'client' → accès restreint à son seul client_id
+#
+# La table profiles a été créée et remplie avec :
+#   - sylvaing@videotron.ca (admin)
+#   - telnekdev@gmail.com (client avec son client_id)
+#
+# Mode développement rapide (optionnel) :
+#   Tu peux toujours activer le bypass dans secrets.toml avec :
+#     DEV_BYPASS_AUTH = true
+#     DEV_BYPASS_ROLE = "client"          # ou "admin"
+#     DEV_BYPASS_CLIENT_ID = "..."        # (uniquement si role=client)
+#
+# Pour la production / usage normal : laisse le bypass désactivé.
+
+if "authenticated" not in st.session_state:
+    st.session_state.authenticated = False
+    st.session_state.user_email = None
+    st.session_state.user_role = None
+    st.session_state.user_client_id = None
+    st.session_state.profile = None
+
+def get_user_profile(email: str):
+    """Récupère le profil depuis la table 'profiles' par email.
+    Si la table n'existe pas ou le profil est absent, on retourne None (l'appelant gère l'erreur).
+    """
+    if not email:
+        return None
+    try:
+        resp = supabase.table('profiles').select('*').eq('email', email.lower().strip()).limit(1).execute()
+        if resp.data:
+            return resp.data[0]
+    except Exception as e:
+        # Table probablement absente ou problème RLS / permissions
+        print(f"[profiles] Erreur fetch profile pour {email}: {e}")
+        # On laisse l'appelant afficher un message utile
+    return None
+
+def login_user(email: str, password: str):
+    """Connexion via Supabase Auth + chargement du profil + rôle."""
+    try:
+        auth_resp = supabase.auth.sign_in_with_password({
+            "email": email.strip(),
+            "password": password
+        })
+        if not auth_resp or not auth_resp.user:
+            st.error("Échec de l'authentification. Vérifiez vos identifiants.")
+            return False
+
+        profile = get_user_profile(email)
+        if not profile:
+            st.error(f"Aucun profil trouvé pour **{email}** dans la table 'profiles'.")
+            st.warning("**Action requise :** Tu dois créer la table `profiles` et insérer les deux utilisateurs avec leurs vrais UUID (pas les placeholders).")
+
+            st.subheader("1. Crée la table (une seule fois)")
+
+            st.code("""create table if not exists profiles (
+  id uuid references auth.users on delete cascade primary key,
+  email text unique not null,
+  role text not null check (role in ('admin','client')),
+  client_id text,
+  created_at timestamptz default now()
+);""", language="sql")
+
+            st.subheader("2. Insère tes deux utilisateurs (ADAPTE LES UUID !)")
+
+            st.code("""-- ⚠️⚠️⚠️  LES UUID DOIVENT EXISTER DANS auth.users  ⚠️⚠️⚠️
+-- Exécute d'abord ceci dans l'SQL Editor pour récupérer les vrais id :
+--   SELECT id, email FROM auth.users;
+
+insert into profiles (id, email, role, client_id)
+values
+  ('a1b2c3d4-e5f6-7890-abcd-ef1234567890', 'sylvaing@videotron.ca', 'admin', null),     -- ← REMPLACE par le VRAI id de sylvaing@videotron.ca
+  ('12345678-1234-1234-1234-123456789abc', 'telnekdev@gmail.com', 'client', 'client-id-exact-ici')  -- ← REMPLACE par le VRAI id de telnekdev + un vrai client_id
+on conflict (id) do update 
+  set role = excluded.role, 
+      client_id = excluded.client_id;
+
+-- Vérifie :
+select * from profiles;""", language="sql")
+
+            st.markdown("""
+**Étapes précises (lis bien) :**
+
+1. Dans l'**SQL Editor** de Supabase, exécute cette requête pour voir les **vrais UUID** de tes utilisateurs :
+   ```sql
+   SELECT id, email FROM auth.users ORDER BY created_at;
+   ```
+   Copie les valeurs complètes de la colonne `id` pour `sylvaing@videotron.ca` et `telnekdev@gmail.com`.
+
+2. Pour savoir quel `client_id` donner à telnekdev, exécute :
+   ```sql
+   SELECT id, company_name FROM clients;
+   ```
+   et copie l'`id` du client qu'il doit pouvoir gérer.
+
+3. Dans le bloc INSERT ci-dessus, **remplace uniquement** les UUID et le `client_id` par les vraies valeurs que tu viens de copier (ne laisse pas les exemples `a1b2c3d4...`).
+
+4. Exécute le INSERT.
+
+5. Vérifie avec `SELECT * FROM profiles;`
+
+Une fois que tu vois tes deux lignes avec les bons UUID, reviens dans Streamlit, rafraîchis et connecte-toi avec les vrais emails + mots de passe.
+""")
+
+            supabase.auth.sign_out()
+            return False
+
+        role = (profile.get('role') or 'client').lower()
+        if role not in ('admin', 'client'):
+            role = 'client'
+
+        st.session_state.authenticated = True
+        st.session_state.user_email = profile.get('email') or email
+        st.session_state.profile = profile
+        st.session_state.user_role = role
+        st.session_state.user_client_id = profile.get('client_id')
+
+        st.success(f"✅ Connecté en tant que **{st.session_state.user_email}** (rôle: {role})")
+        st.rerun()
+        return True
+
+    except Exception as e:
+        st.error(f"Erreur lors de la connexion : {str(e)}")
+        return False
+
+def logout_user():
+    try:
+        supabase.auth.sign_out()
+    except Exception:
+        pass
+
+    # Nettoyage complet de la session
+    keys_to_clear = ["authenticated", "user_email", "user_role", "user_client_id", "profile",
+                     "main_client_selector"]  # on nettoie aussi la clé du selectbox pour éviter les résidus
+    for k in keys_to_clear:
+        if k in st.session_state:
+            del st.session_state[k]
+
+    st.rerun()
+
 def get_clients():
-    return supabase.table('clients').select('*').execute().data
+    """Clients accessibles selon le rôle de l'utilisateur connecté."""
+    role = st.session_state.get("user_role")
+    if role == "admin":
+        return supabase.table('clients').select('*').execute().data or []
+    else:
+        cid = st.session_state.get("user_client_id")
+        if cid:
+            return supabase.table('clients').select('*').eq('id', cid).execute().data or []
+        return []
 
 def update_client(client_id, data):
     return supabase.table('clients').update(data).eq('id', client_id).execute()
@@ -26,56 +237,159 @@ def update_client(client_id, data):
 st.set_page_config(page_title="Amélie - Telnek AI", page_icon="📞", layout="wide")
 st.title("📞 Telnek – Réceptioniste IA")
 
-# ==================== SÉLECTION DU CLIENT - VERSION STABLE ====================
+# ==================== GATE D'AUTHENTIFICATION ====================
+if not st.session_state.get("authenticated", False):
+
+    # === MODE DÉVELOPPEMENT (optionnel) ===
+    # Active un login automatique sans mot de passe (très pratique pour tester).
+    # Ajoute dans .streamlit/secrets.toml :
+    #
+    #   DEV_BYPASS_AUTH = true
+    #   # Pour simuler un utilisateur client :
+    #   # DEV_BYPASS_ROLE = "client"
+    #   # DEV_BYPASS_CLIENT_ID = "le-vrai-id-d-un-client"
+    #
+    # Laisse désactivé pour l'utilisation normale avec les vrais comptes Supabase Auth.
+    if st.secrets.get("DEV_BYPASS_AUTH", False):
+        # Permet de tester facilement les deux rôles sans table profiles
+        bypass_role = str(st.secrets.get("DEV_BYPASS_ROLE", "admin")).lower()
+        bypass_client_id = st.secrets.get("DEV_BYPASS_CLIENT_ID", None)
+
+        if bypass_role not in ("admin", "client"):
+            bypass_role = "admin"
+
+        st.session_state.authenticated = True
+        st.session_state.user_email = f"dev-{bypass_role}@local.test"
+        st.session_state.user_role = bypass_role
+        st.session_state.user_client_id = bypass_client_id if bypass_role == "client" else None
+        st.session_state.profile = {"role": bypass_role, "email": st.session_state.user_email}
+
+        if bypass_role == "admin":
+            st.info("Mode développement actif (admin fictif). "
+                    "Pour simuler un client, ajoute DEV_BYPASS_ROLE = \"client\" + DEV_BYPASS_CLIENT_ID dans secrets.toml.")
+        else:
+            st.info(f"Mode développement actif (client fictif – client_id={bypass_client_id}).")
+
+        st.rerun()
+
+    st.subheader("🔐 Connexion requise")
+    st.caption("Utilisez les identifiants Supabase Auth associés à votre profil (admin ou client).")
+
+    with st.form(key="login_form", clear_on_submit=False):
+        col1, col2 = st.columns([2, 1])
+        with col1:
+            default_email = "sylvaing@videotron.ca"
+            email = st.text_input("Adresse courriel", value=default_email, placeholder="votre@email.com")
+        with col2:
+            password = st.text_input("Mot de passe", type="password", placeholder="••••••••")
+
+        submitted = st.form_submit_button("🔓 Se connecter", type="primary", use_container_width=True)
+
+        if submitted:
+            login_user(email, password)
+
+    st.info("Les administrateurs voient tous les clients. Les utilisateurs 'client' ne voient que leur propre client.")
+    st.stop()
+
+# ==================== SIDEBAR UTILISATEUR + DÉCONNEXION ====================
+with st.sidebar:
+    st.divider()
+    st.markdown("### 👤 Session")
+    st.markdown(f"**{st.session_state.get('user_email', '—')}**")
+    role = st.session_state.get('user_role', '—')
+    role_emoji = "🛡️" if role == "admin" else "👤"
+    st.markdown(f"Rôle : {role_emoji} **{role}**")
+
+    if st.session_state.get("user_client_id"):
+        st.caption(f"Client restreint : `{st.session_state['user_client_id']}`")
+
+    st.divider()
+    if st.button("🚪 Se déconnecter", type="secondary", use_container_width=True):
+        logout_user()
+
+# ==================== SÉLECTION DU CLIENT (RÔLE-AWARE) ====================
 clients = get_clients()
 
 if not clients:
-    st.error("Aucun client trouvé.")
+    st.error("Aucun client accessible avec votre compte. Contactez un administrateur.")
     st.stop()
+
+is_admin = (st.session_state.get("user_role") == "admin")
 
 # Tri stable par ID
 clients_sorted = sorted(clients, key=lambda c: c.get('id', '').lower())
-
-# Liste simple des IDs (plus sûr que le dictionnaire)
 client_ids = [c['id'] for c in clients_sorted if c.get('id')]
 
-# Sélection avec une clé fixe → ça règle le bug
-selected_client_id = st.selectbox(
-    "Sélectionnez un client",
-    options=client_ids,
-    key="main_client_selector",          # ← C’est la ligne qui change tout
-    index=client_ids.index(selected_client_id) if 'selected_client_id' in locals() and selected_client_id in client_ids else 0
-)
+if is_admin:
+    # Comportement original pour les admins : choix libre parmi tous les clients
+    selected_client_id = st.selectbox(
+        "Sélectionnez un client",
+        options=client_ids,
+        key="main_client_selector",
+        index=client_ids.index(selected_client_id) if 'selected_client_id' in locals() and selected_client_id in client_ids else 0
+    )
+else:
+    # Utilisateur client : un seul client possible → auto-sélection + affichage clair
+    selected_client_id = client_ids[0] if client_ids else None
+    if selected_client_id:
+        company_name = next((c.get('company_name', selected_client_id) for c in clients if c['id'] == selected_client_id), selected_client_id)
+        st.success(f"📍 Accès restreint au client : **{company_name}** (`{selected_client_id}`)")
 
 if selected_client_id:
-    client = next(c for c in clients if c['id'] == selected_client_id)
+    client = next((c for c in clients if c['id'] == selected_client_id), None)
+    if client is None:
+        st.error("Client introuvable.")
+        st.stop()
 
-    # ====================== TABS PRINCIPAUX ======================
-    tab_global, tab_config, tab_appels, tab_stats = st.tabs([
-        "🌍 Dashboard Global (tous les clients)",
-        "⚙️ Configuration client",
-        "📞 Historique des appels",
-        "📊 Statistiques"
-    ])
+    # ====================== TABS PRINCIPAUX (conditionnels selon rôle) ======================
+    if is_admin:
+        tab_list = [
+            "🌍 Dashboard Global (tous les clients)",
+            "⚙️ Configuration client",
+            "📞 Historique des appels",
+            "📊 Statistiques"
+        ]
+        tabs = st.tabs(tab_list)
+        tab_global = tabs[0]
+        tab_config = tabs[1]
+        tab_appels = tabs[2]
+        tab_stats = tabs[3]
+    else:
+        # Pas de dashboard global pour les utilisateurs client
+        tab_list = [
+            "⚙️ Configuration client",
+            "📞 Historique des appels",
+            "📊 Statistiques"
+        ]
+        tabs = st.tabs(tab_list)
+        tab_config = tabs[0]
+        tab_appels = tabs[1]
+        tab_stats = tabs[2]
 
     # ====================== TAB DASHBOARD GLOBAL (avec stats cumulatives – CORRIGÉ) ======================
-    with tab_global:
-        st.subheader("🌍 Dashboard Global – Tous les clients")
-        
-        auto_refresh = st.toggle("🔄 Rafraîchissement automatique toutes les 5 secondes", 
-                                value=True, key="global_refresh_top")
+    # N'apparaît et ne s'exécute que pour les administrateurs (sinon tab_global n'est même pas créé)
+    if is_admin:
+        with tab_global:
+            st.subheader("🌍 Dashboard Global – Tous les clients")
+            
+            auto_refresh = st.toggle("🔄 Rafraîchissement automatique toutes les 5 secondes", 
+                                    value=True, key="global_refresh_top")
         
         if auto_refresh:
             st_autorefresh(interval=5000, limit=300, key="global_auto_top_level")
 
         # ====================== APPELS EN COURS (live) ======================
-        # === MODIFICATION : on filtre les appels récents seulement ===
-        live_response = supabase.table('vw_appels_clients') \
-            .select('client_id, company_name, call_date, call_time, caller_number, room_name, status_label, started_at') \
-            .eq('status', 'in_progress') \
-            .gte('started_at', (datetime.now(pytz.utc) - timedelta(minutes=90)).isoformat()) \
-            .order('started_at', desc=True) \
-            .execute()
+        # Garde : bloc global (tous clients) — ignoré pour les rôles "client"
+        if not is_admin:
+            st.caption("🔒 Section réservée aux administrateurs (appels en cours globaux).")
+        else:
+            # === MODIFICATION : on filtre les appels récents seulement ===
+            live_response = supabase.table('vw_appels_clients') \
+                .select('client_id, company_name, call_date, call_time, caller_number, room_name, status_label, started_at') \
+                .eq('status', 'in_progress') \
+                .gte('started_at', (datetime.now(pytz.utc) - timedelta(minutes=90)).isoformat()) \
+                .order('started_at', desc=True) \
+                .execute()
         
         if live_response.data:
             df_global = pd.DataFrame(live_response.data)
@@ -104,40 +418,48 @@ if selected_client_id:
             st.success("✅ Aucun appel en cours. Tout est calme dans l’empire Amélie ! 😌")
 
         # ====================== DERNIER APPEL REÇU (GLOBAL) ======================
-        st.divider()
-        st.subheader("🕒 Dernier appel reçu – Tous les clients")
-
-        latest_response = supabase.table('vw_appels_clients') \
-            .select('started_at, company_name, caller_number, status_label') \
-            .order('started_at', desc=True) \
-            .limit(1) \
-            .execute()
-
-        if latest_response.data:
-            last = latest_response.data[0]
-            
-            tz_montreal = pytz.timezone('America/Montreal')
-            last_time = pd.to_datetime(last['started_at'])
-            if last_time.tz is None:
-                last_time = last_time.tz_localize('UTC')
-            last_time = last_time.tz_convert(tz_montreal)
-            
-            formatted_time = last_time.strftime("%d %B %Y à %H:%M:%S")
-            
-            st.metric(
-                label="🕒 Dernier appel reçu",
-                value=formatted_time,
-                delta=f"{last.get('company_name', 'Inconnu')} • {last.get('caller_number', 'N/A')}"
-            )
-            st.caption(f"**Statut :** {last.get('status_label', '—')}")
+        # Protection rôle client
+        if not is_admin:
+            st.caption("🔒 'Dernier appel global' réservé aux administrateurs.")
         else:
-            st.info("Aucun appel enregistré pour le moment.")
+            st.divider()
+            st.subheader("🕒 Dernier appel reçu – Tous les clients")
+
+            latest_response = supabase.table('vw_appels_clients') \
+                .select('started_at, company_name, caller_number, status_label') \
+                .order('started_at', desc=True) \
+                .limit(1) \
+                .execute()
+
+            if latest_response.data:
+                last = latest_response.data[0]
+                
+                tz_montreal = pytz.timezone('America/Montreal')
+                last_time = pd.to_datetime(last['started_at'])
+                if last_time.tz is None:
+                    last_time = last_time.tz_localize('UTC')
+                last_time = last_time.tz_convert(tz_montreal)
+                
+                formatted_time = last_time.strftime("%d %B %Y à %H:%M:%S")
+                
+                st.metric(
+                    label="🕒 Dernier appel reçu",
+                    value=formatted_time,
+                    delta=f"{last.get('company_name', 'Inconnu')} • {last.get('caller_number', 'N/A')}"
+                )
+                st.caption(f"**Statut :** {last.get('status_label', '—')}")
+            else:
+                st.info("Aucun appel enregistré pour le moment.")
             
         # ====================== STATS CUMULATIVES GLOBALES (FIX KeyError) ======================
-        st.divider()
-        st.subheader("📊 Statistiques cumulatives – Tous les clients")
+        # Protection critique : ce bloc agrège TOUS les clients (plusieurs requêtes sans filtre client_id)
+        if not is_admin:
+            st.caption("🔒 Statistiques cumulatives globales réservées aux administrateurs.")
+        else:
+            st.divider()
+            st.subheader("📊 Statistiques cumulatives – Tous les clients")
 
-        stats_response = supabase.table('vw_stats_appels_clients').select('*').execute()
+            stats_response = supabase.table('vw_stats_appels_clients').select('*').execute()
         
         if stats_response.data:
             df_stats = pd.DataFrame(stats_response.data)
@@ -187,6 +509,7 @@ if selected_client_id:
                         use_container_width=True, hide_index=True)
         else:
             st.info("Aucune statistique disponible pour le moment.")
+        # fin du if is_admin pour les stats globales
                         
 # ====================== TAB CONFIGURATION (VERSION ROBUSTE – gère strings JSON) ======================
 with tab_config:
