@@ -130,58 +130,6 @@ def login_user(email: str, password: str):
         profile = get_user_profile(email)
         if not profile:
             st.error(f"Aucun profil trouvé pour **{email}** dans la table 'profiles'.")
-            st.warning("**Action requise :** Tu dois créer la table `profiles` et insérer les deux utilisateurs avec leurs vrais UUID (pas les placeholders).")
-
-            st.subheader("1. Crée la table (une seule fois)")
-
-            st.code("""create table if not exists profiles (
-  id uuid references auth.users on delete cascade primary key,
-  email text unique not null,
-  role text not null check (role in ('admin','client')),
-  client_id text,
-  created_at timestamptz default now()
-);""", language="sql")
-
-            st.subheader("2. Insère tes deux utilisateurs (ADAPTE LES UUID !)")
-
-            st.code("""-- ⚠️⚠️⚠️  LES UUID DOIVENT EXISTER DANS auth.users  ⚠️⚠️⚠️
--- Exécute d'abord ceci dans l'SQL Editor pour récupérer les vrais id :
---   SELECT id, email FROM auth.users;
-
-insert into profiles (id, email, role, client_id)
-values
-  ('a1b2c3d4-e5f6-7890-abcd-ef1234567890', 'sylvaing@videotron.ca', 'admin', null),     -- ← REMPLACE par le VRAI id de sylvaing@videotron.ca
-  ('12345678-1234-1234-1234-123456789abc', 'telnekdev@gmail.com', 'client', 'client-id-exact-ici')  -- ← REMPLACE par le VRAI id de telnekdev + un vrai client_id
-on conflict (id) do update 
-  set role = excluded.role, 
-      client_id = excluded.client_id;
-
--- Vérifie :
-select * from profiles;""", language="sql")
-
-            st.markdown("""
-**Étapes précises (lis bien) :**
-
-1. Dans l'**SQL Editor** de Supabase, exécute cette requête pour voir les **vrais UUID** de tes utilisateurs :
-   ```sql
-   SELECT id, email FROM auth.users ORDER BY created_at;
-   ```
-   Copie les valeurs complètes de la colonne `id` pour `sylvaing@videotron.ca` et `telnekdev@gmail.com`.
-
-2. Pour savoir quel `client_id` donner à telnekdev, exécute :
-   ```sql
-   SELECT id, company_name FROM clients;
-   ```
-   et copie l'`id` du client qu'il doit pouvoir gérer.
-
-3. Dans le bloc INSERT ci-dessus, **remplace uniquement** les UUID et le `client_id` par les vraies valeurs que tu viens de copier (ne laisse pas les exemples `a1b2c3d4...`).
-
-4. Exécute le INSERT.
-
-5. Vérifie avec `SELECT * FROM profiles;`
-
-Une fois que tu vois tes deux lignes avec les bons UUID, reviens dans Streamlit, rafraîchis et connecte-toi avec les vrais emails + mots de passe.
-""")
 
             supabase.auth.sign_out()
             return False
