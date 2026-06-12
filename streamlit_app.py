@@ -680,7 +680,7 @@ with tab_config:
         transfer_numbers_edited = "{}"  # pour le save
 
     # Toggles
-    col1, col2, col3 = st.columns(3)
+    col1, col2, col3, col4 = st.columns(4)
     with col1:
         get_caller_history_flag = st.toggle(
             "Activé mémoire de l'appelant", 
@@ -695,6 +695,11 @@ with tab_config:
         confirmation_required = st.toggle(
             "Confirmation requise sur prise de message",
             value=client.get('confirmation_required', True)
+        )
+    with col4:
+        hangup_message_flag = st.toggle(
+            "Envois message sur raccrochement prématuré",
+            value=client.get('hangup_message_flag', False)
         )
 
     # ====================== GOOGLE CALENDAR ======================
@@ -769,7 +774,8 @@ with tab_config:
             'transfer_numbers': transfer_numbers_parsed,
             'get_caller_history_flag': get_caller_history_flag,
             'call_transcription_flag': call_transcription_flag,
-            'confirmation_required': confirmation_required
+            'confirmation_required': confirmation_required,
+            'hangup_message_flag': hangup_message_flag
         }
         update_client(selected_client_id, updated_data)
         st.success("✅ Configuration sauvegardée avec succès !")
