@@ -37,6 +37,20 @@ def render_app_header() -> None:
     with col_title:
         st.markdown(f"## {_t('app_subtitle')}")
 
+
+def render_app_footer() -> None:
+    st.divider()
+    st.markdown(
+        f'<p style="text-align:center;color:#888;font-size:0.85rem;margin:1rem 0;">'
+        f'{_t("copyright_footer")}</p>',
+        unsafe_allow_html=True,
+    )
+
+
+def stop_app() -> None:
+    render_app_footer()
+    st.stop()
+
 # ==================== CONNEXION SUPABASE (avec gestion d'erreur conviviale) ====================
 def init_supabase():
     """Initialise le client Supabase avec un message d'erreur clair si les secrets manquent."""
@@ -89,7 +103,7 @@ TWILIO_AUTH_TOKEN = "your_auth_token_ici"
         Laissez désactivé en utilisation normale.
         """)
 
-        st.stop()
+        stop_app()
 
 supabase: Client = init_supabase()
 
@@ -272,7 +286,7 @@ if not st.session_state.get("authenticated", False):
             login_user(email, password)
 
     st.info(_t("login_info"))
-    st.stop()
+    stop_app()
 
 # ==================== SIDEBAR UTILISATEUR + DÉCONNEXION ====================
 with st.sidebar:
@@ -301,7 +315,7 @@ clients = get_clients()
 
 if not clients:
     st.error(_t("no_clients"))
-    st.stop()
+    stop_app()
 
 is_admin = (st.session_state.get("user_role") == "admin")
 
@@ -331,7 +345,7 @@ if selected_client_id:
     client = next((c for c in clients if c['id'] == selected_client_id), None)
     if client is None:
         st.error(_t("client_not_found"))
-        st.stop()
+        stop_app()
 
     client_tz = pytz.timezone(resolve_client_timezone(client))
 
@@ -739,7 +753,7 @@ if selected_client_id:
                 url_map_parsed = json.loads(url_map_edited) if url_map_edited.strip() else {}
             except:
                 st.error(_t("url_map_invalid"))
-                st.stop()
+                stop_app()
     
             transfer_numbers_parsed = {}
             if transfer_mode_selected != "none":
@@ -747,7 +761,7 @@ if selected_client_id:
                     transfer_numbers_parsed = json.loads(transfer_numbers_edited) if transfer_numbers_edited.strip() else {}
                 except:
                     st.error(_t("transfer_json_invalid"))
-                    st.stop()
+                    stop_app()
             else:
                 transfer_numbers_parsed = client.get('transfer_numbers', {}) or {}
     
@@ -1079,4 +1093,5 @@ if selected_client_id:
         
         else:
             st.info(_t("no_stats_client"))
-            
+
+render_app_footer()

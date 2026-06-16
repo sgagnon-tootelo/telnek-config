@@ -191,6 +191,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "login_error": "Erreur lors de la connexion : {error}",
         "connected_as": "✅ Connecté en tant que **{email}** (rôle: {role})",
         "download_wav": "📥 Télécharger l'enregistrement WAV",
+        "copyright_footer": "Copyright © 2026 Telnek - Tous droits réservés.",
     },
     "en": {
         "page_title": "Emily - Telnek AI",
@@ -345,6 +346,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "login_error": "Error during sign-in: {error}",
         "connected_as": "✅ Signed in as **{email}** (role: {role})",
         "download_wav": "📥 Download WAV recording",
+        "copyright_footer": "Copyright © 2026 Telnek - All Rights Reserved.",
     },
 }
 
