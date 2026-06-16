@@ -9,6 +9,21 @@ import requests
 from streamlit_autorefresh import st_autorefresh
 import plotly.express as px
 
+from i18n import (
+    PRIMARY_LANGUAGES,
+    TIMEZONE_OPTIONS,
+    get_ui_lang,
+    normalize_primary_language,
+    primary_language_label,
+    resolve_client_timezone,
+    t,
+    timezone_label,
+)
+
+
+def _t(key: str, **kwargs) -> str:
+    return t(key, st.session_state, **kwargs)
+
 # ==================== CONNEXION SUPABASE (avec gestion d'erreur conviviale) ====================
 def init_supabase():
     """Initialise le client Supabase avec un message d'erreur clair si les secrets manquent."""
@@ -89,6 +104,9 @@ supabase: Client = init_supabase()
 #
 # Pour la production / usage normal : laisse le bypass désactivé.
 
+if "ui_lang" not in st.session_state:
+    st.session_state.ui_lang = "fr"
+
 if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
     st.session_state.user_email = None
@@ -120,12 +138,12 @@ def login_user(email: str, password: str):
             "password": password
         })
         if not auth_resp or not auth_resp.user:
-            st.error("Échec de l'authentification. Vérifiez vos identifiants.")
+            st.error(_t("auth_failed"))
             return False
 
         profile = get_user_profile(email)
         if not profile:
-            st.error(f"Aucun profil trouvé pour **{email}** dans la table 'profiles'.")
+            st.error(_t("no_profile", email=email))
 
             supabase.auth.sign_out()
             return False
@@ -140,12 +158,12 @@ def login_user(email: str, password: str):
         st.session_state.user_role = role
         st.session_state.user_client_id = profile.get('client_id')
 
-        st.success(f"✅ Connecté en tant que **{st.session_state.user_email}** (rôle: {role})")
+        st.success(_t("connected_as", email=st.session_state.user_email, role=role))
         st.rerun()
         return True
 
     except Exception as e:
-        st.error(f"Erreur lors de la connexion : {str(e)}")
+        st.error(_t("login_error", error=str(e)))
         return False
 
 def logout_user():
@@ -178,8 +196,8 @@ def update_client(client_id, data):
     return supabase.table('clients').update(data).eq('id', client_id).execute()
 
 # ==================== INTERFACE ====================
-st.set_page_config(page_title="Amélie - Telnek AI", page_icon="📞", layout="wide")
-st.title("📞 Telnek – Réceptionniste IA")
+st.set_page_config(page_title=_t("page_title"), page_icon="📞", layout="wide")
+st.title(_t("app_title"))
 
 # ==================== GATE D'AUTHENTIFICATION ====================
 if not st.session_state.get("authenticated", False):
@@ -209,53 +227,67 @@ if not st.session_state.get("authenticated", False):
         st.session_state.profile = {"role": bypass_role, "email": st.session_state.user_email}
 
         if bypass_role == "admin":
-            st.info("Mode développement actif (admin fictif). "
-                    "Pour simuler un client, ajoutez DEV_BYPASS_ROLE = \"client\" + DEV_BYPASS_CLIENT_ID dans secrets.toml.")
+            st.info(_t("dev_admin"))
         else:
-            st.info(f"Mode développement actif (client fictif – client_id={bypass_client_id}).")
+            st.info(_t("dev_client", client_id=bypass_client_id))
 
         st.rerun()
 
-    st.subheader("🔐 Connexion requise")
-    st.caption("Utilisez les identifiants Supabase Auth associés à votre profil (admin ou client).")
+    lang_col, _ = st.columns([1, 3])
+    with lang_col:
+        st.selectbox(
+            _t("ui_language"),
+            options=["fr", "en"],
+            format_func=lambda x: "Français" if x == "fr" else "English",
+            key="ui_lang",
+        )
+
+    st.subheader(_t("login_required"))
+    st.caption(_t("login_caption"))
 
     with st.form(key="login_form", clear_on_submit=False):
         col1, col2 = st.columns([2, 1])
         with col1:
             default_email = "sylvaing@videotron.ca"
-            email = st.text_input("Adresse courriel", value=default_email, placeholder="votre@email.com")
+            email = st.text_input(_t("email"), value=default_email, placeholder="votre@email.com")
         with col2:
-            password = st.text_input("Mot de passe", type="password", placeholder="••••••••")
+            password = st.text_input(_t("password"), type="password", placeholder="••••••••")
 
-        submitted = st.form_submit_button("🔓 Se connecter", type="primary", use_container_width=True)
+        submitted = st.form_submit_button(_t("login_btn"), type="primary", use_container_width=True)
 
         if submitted:
             login_user(email, password)
 
-    st.info("Les administrateurs voient tous les clients. Les utilisateurs 'client' ne voient que leur propre client.")
+    st.info(_t("login_info"))
     st.stop()
 
 # ==================== SIDEBAR UTILISATEUR + DÉCONNEXION ====================
 with st.sidebar:
+    st.selectbox(
+        _t("ui_language"),
+        options=["fr", "en"],
+        format_func=lambda x: "Français" if x == "fr" else "English",
+        key="ui_lang",
+    )
     st.divider()
-    st.markdown("### 👤 Session")
+    st.markdown(f"### {_t('session')}")
     st.markdown(f"**{st.session_state.get('user_email', '—')}**")
     role = st.session_state.get('user_role', '—')
     role_emoji = "🛡️" if role == "admin" else "👤"
-    st.markdown(f"Rôle : {role_emoji} **{role}**")
+    st.markdown(f"{_t('role')} : {role_emoji} **{role}**")
 
     if st.session_state.get("user_client_id"):
-        st.caption(f"Client restreint : `{st.session_state['user_client_id']}`")
+        st.caption(f"{_t('restricted_client')} : `{st.session_state['user_client_id']}`")
 
     st.divider()
-    if st.button("🚪 Se déconnecter", type="secondary", use_container_width=True):
+    if st.button(_t("logout"), type="secondary", use_container_width=True):
         logout_user()
 
 # ==================== SÉLECTION DU CLIENT (RÔLE-AWARE) ====================
 clients = get_clients()
 
 if not clients:
-    st.error("Aucun client accessible avec votre compte. Contactez un administrateur.")
+    st.error(_t("no_clients"))
     st.stop()
 
 is_admin = (st.session_state.get("user_role") == "admin")
@@ -270,7 +302,7 @@ if is_admin:
     prev_value = st.session_state.get("main_client_selector")
     default_index = client_ids.index(prev_value) if prev_value in client_ids else 0
     selected_client_id = st.selectbox(
-        "Sélectionnez un client",
+        _t("select_client"),
         options=client_ids,
         key="main_client_selector",
         index=default_index
@@ -280,21 +312,23 @@ else:
     selected_client_id = client_ids[0] if client_ids else None
     if selected_client_id:
         company_name = next((c.get('company_name', selected_client_id) for c in clients if c['id'] == selected_client_id), selected_client_id)
-        st.success(f"📍 Accès restreint au client : **{company_name}** (`{selected_client_id}`)")
+        st.success(f"{_t('restricted_access')} : **{company_name}** (`{selected_client_id}`)")
 
 if selected_client_id:
     client = next((c for c in clients if c['id'] == selected_client_id), None)
     if client is None:
-        st.error("Client introuvable.")
+        st.error(_t("client_not_found"))
         st.stop()
+
+    client_tz = pytz.timezone(resolve_client_timezone(client))
 
     # ====================== TABS PRINCIPAUX (conditionnels selon rôle) ======================
     if is_admin:
         tab_list = [
-            "🌍 Dashboard Global (tous les clients)",
-            "⚙️ Configuration client",
-            "📞 Historique des appels",
-            "📊 Statistiques"
+            _t("tab_global"),
+            _t("tab_config"),
+            _t("tab_calls"),
+            _t("tab_stats"),
         ]
         tabs = st.tabs(tab_list)
         tab_global = tabs[0]
@@ -302,11 +336,10 @@ if selected_client_id:
         tab_appels = tabs[2]
         tab_stats = tabs[3]
     else:
-        # Pas de dashboard global pour les utilisateurs client
         tab_list = [
-            "⚙️ Configuration client",
-            "📞 Historique des appels",
-            "📊 Statistiques"
+            _t("tab_config"),
+            _t("tab_calls"),
+            _t("tab_stats"),
         ]
         tabs = st.tabs(tab_list)
         tab_config = tabs[0]
@@ -317,9 +350,9 @@ if selected_client_id:
 
     if is_admin:
         with tab_global:
-            st.subheader("🌍 Dashboard Global – Tous les clients")
+            st.subheader(_t("global_dashboard"))
             
-            auto_refresh = st.toggle("🔄 Rafraîchissement automatique toutes les 5 secondes", 
+            auto_refresh = st.toggle(_t("auto_refresh"), 
                                     value=True, key="global_refresh_top")
         
             if auto_refresh:
@@ -345,7 +378,8 @@ if selected_client_id:
                 df_global['started_at'] = df_global['started_at'].dt.tz_convert(tz_montreal)
                 
                 df_global['Durée en cours'] = df_global['started_at'].apply(
-                    lambda x: str(now - x).split('.')[0] + " min" if (now - x).total_seconds() > 60 else "Moins d’une minute"
+                    lambda x: _t("duration_live", duration=str(now - x).split('.')[0])
+                    if (now - x).total_seconds() > 60 else _t("less_than_minute")
                 )
                 
                 display_cols = ['company_name', 'call_date', 'call_time', 'caller_number', 'Durée en cours', 'room_name']
@@ -355,13 +389,12 @@ if selected_client_id:
                 )
                 
                 st.dataframe(styled, use_container_width=True, hide_index=True)
-                st.metric("📞 TOTAL appels en cours (tous clients)", len(df_global))
+                st.metric(_t("live_calls_total"), len(df_global))
             else:
-                st.success("✅ Aucun appel en cours.")
+                st.success(_t("live_calls_none"))
 
-            # ====================== DERNIER APPEL REÇU (GLOBAL) ======================
             st.divider()
-            st.subheader("🕒 Dernier appel reçu – Tous les clients")
+            st.subheader(_t("last_call_global"))
 
             latest_response = supabase.table('vw_appels_clients') \
                 .select('started_at, company_name, caller_number, status_label') \
@@ -381,17 +414,16 @@ if selected_client_id:
                 formatted_time = last_time.strftime("%d %B %Y à %H:%M:%S")
                 
                 st.metric(
-                    label="🕒 Dernier appel reçu",
+                    label=_t("last_call_metric"),
                     value=formatted_time,
                     delta=f"{last.get('company_name', 'Inconnu')} • {last.get('caller_number', 'N/A')}"
                 )
-                st.caption(f"**Statut :** {last.get('status_label', '—')}")
+                st.caption(f"**{_t('status')} :** {last.get('status_label', '—')}")
             else:
-                st.info("Aucun appel enregistré pour le moment.")
+                st.info(_t("no_calls_yet"))
             
-            # ====================== STATS CUMULATIVES GLOBALES ======================
             st.divider()
-            st.subheader("📊 Statistiques cumulatives – Tous les clients")
+            st.subheader(_t("cumulative_stats"))
 
             stats_response = supabase.table('vw_stats_appels_clients').select('*').execute()
         
@@ -420,33 +452,34 @@ if selected_client_id:
 
                 # Métriques
                 col1, col2, col3, col4, col5, col6, col7 = st.columns(7)
-                with col1: st.metric("📞 Total appels", total_appels)
-                with col2: st.metric("✅ Complétés", completes)
-                with col3: st.metric("📅 RDV réservés", rdv_reserves)
-                with col4: st.metric("⏱️ Durée moyenne", f"{duree_moyenne} s")
-                with col5: st.metric("📵 Abandonnés", appels_abandonnes)
-                with col6: st.metric("✅ RDV Confirmés", rdv_confirmes)
-                with col7: st.metric("❌ RDV Annulés", rdv_annules)
+                with col1: st.metric(_t("metric_total"), total_appels)
+                with col2: st.metric(_t("metric_completed"), completes)
+                with col3: st.metric(_t("metric_appointments"), rdv_reserves)
+                with col4: st.metric(_t("metric_avg_duration"), f"{duree_moyenne} s")
+                with col5: st.metric(_t("metric_abandoned"), appels_abandonnes)
+                with col6: st.metric(_t("metric_confirmed"), rdv_confirmes)
+                with col7: st.metric(_t("metric_cancelled"), rdv_annules)
 
                 # Tableau récap par client + ligne TOTAL
                 df_stats_display = df_stats[['company_name', 'total_appels', 'appels_completes', 'rdv_reserves', 'duree_moyenne_sec']].copy()
                 df_stats_display = df_stats_display.rename(columns={
-                    'company_name': 'Client',
-                    'total_appels': 'Total appels',
-                    'appels_completes': 'Complétés',
-                    'rdv_reserves': 'RDV réservés',
-                    'duree_moyenne_sec': 'Durée moy. (s)'
+                    'company_name': _t("col_client"),
+                    'total_appels': _t("col_total"),
+                    'appels_completes': _t("col_completed"),
+                    'rdv_reserves': _t("col_appointments"),
+                    'duree_moyenne_sec': _t("col_avg_sec"),
                 })
-                df_stats_display.loc[len(df_stats_display)] = ['TOTAL', total_appels, completes, rdv_reserves, duree_moyenne]
+                df_stats_display.loc[len(df_stats_display)] = [
+                    _t("col_total_row"), total_appels, completes, rdv_reserves, duree_moyenne
+                ]
                 
                 st.dataframe(df_stats_display.style.set_properties(subset=['Client'], **{'font-weight': 'bold'}), 
                             use_container_width=True, hide_index=True)
             else:
-                st.info("Aucune statistique disponible pour le moment.")
+                st.info(_t("no_stats"))
 
-    # ====================== TAB CONFIGURATION (VERSION ROBUSTE – gère strings JSON) ======================
     with tab_config:
-        st.subheader(f"⚙️ Paramètres pour {selected_client_id}")
+        st.subheader(_t("config_for", client_id=selected_client_id))
         
         # ====================== HELPER ROBUSTE POUR JSON ======================
         def safe_json_loads(data):
@@ -461,22 +494,47 @@ if selected_client_id:
             data = safe_json_loads(data)
             return json.dumps(data, indent=4, ensure_ascii=False)
         
-        # ====================== CHAMPS DE BASE ======================
-        company_name = st.text_input("Nom de l'entreprise", value=client.get('company_name', ''))
-        company_address = st.text_input("Adresse de l'entreprise", value=client.get('company_address', ''))
-        company_hours = st.text_input("Heures d'ouverture (texte affiché)", value=client.get('company_hours', ''))
+        ui_lang = get_ui_lang(st.session_state)
+        st.subheader(_t("locale_section"))
+        col_lang, col_tz = st.columns(2)
+        current_lang = normalize_primary_language(client.get("primary_language"))
+        lang_options = [o["value"] for o in PRIMARY_LANGUAGES]
+        with col_lang:
+            primary_language_selected = st.selectbox(
+                _t("primary_language"),
+                options=lang_options,
+                format_func=lambda v: primary_language_label(v, ui_lang),
+                index=lang_options.index(current_lang) if current_lang in lang_options else 0,
+            )
+        current_tz = resolve_client_timezone(client)
+        tz_options = [o["iana"] for o in TIMEZONE_OPTIONS]
+        if current_tz not in tz_options:
+            tz_options = [current_tz] + tz_options
+        with col_tz:
+            timezone_selected = st.selectbox(
+                _t("timezone"),
+                options=tz_options,
+                format_func=lambda v: timezone_label(v, ui_lang),
+                index=tz_options.index(current_tz) if current_tz in tz_options else 0,
+            )
+        st.caption(
+            _t("locale_hint_en") if primary_language_selected == "en-US" else _t("locale_hint_fr")
+        )
+
+        company_name = st.text_input(_t("company_name"), value=client.get('company_name', ''))
+        company_address = st.text_input(_t("company_address"), value=client.get('company_address', ''))
+        company_hours = st.text_input(_t("company_hours"), value=client.get('company_hours', ''))
         
         col1, col2 = st.columns(2)
         with col1:
-            opening_hour = st.number_input("🕒 Heure d'ouverture (0-23)", 
+            opening_hour = st.number_input(_t("opening_hour"), 
                                          value=client.get('opening_hour', 9), min_value=0, max_value=23, step=1)
         with col2:
-            closing_hour = st.number_input("🕒 Heure de fermeture (0-24)", 
+            closing_hour = st.number_input(_t("closing_hour"), 
                                          value=client.get('closing_hour', 17), min_value=0, max_value=24, step=1)
     
-        # ====================== ADMIN PHONES (liste multiple – jsonb) ======================
-        st.subheader("📱 Numéros de réception des SMS")
-        st.caption("Entrez un ou plusieurs numéros de téléphone (un par ligne). Format recommandé : +1514...")
+        st.subheader(_t("sms_numbers"))
+        st.caption(_t("sms_caption"))
     
         # Chargement de la liste actuelle
         admin_phones_raw = client.get('admin_phones')
@@ -488,36 +546,39 @@ if selected_client_id:
             current_phones = client.get('admin_phone', '')  # fallback temporaire sur l’ancienne colonne
     
         admin_phones_edited = st.text_area(
-            "Numéros de téléphone pour SMS (un par ligne)",
+            _t("sms_phones"),
             value=current_phones,
             height=120,
             help="Exemple :\n+15149474976\n+15145551234"
         )
         
-        callee_number = st.text_input("Numéro de l'agent virtuel", value=client.get('callee_number', ''), disabled=True)
+        callee_number = st.text_input(_t("virtual_number"), value=client.get('callee_number', ''), disabled=True)
         
-        instructions_specific = st.text_area("Instructions spécifiques de l'entreprise", 
+        instructions_specific = st.text_area(_t("instructions"), 
                                            value=client.get('instructions_specific', ''), height=120)
         
-        base_url = st.text_input("Site web de l'entreprise", value=client.get('base_url', ''))
+        base_url = st.text_input(_t("website"), value=client.get('base_url', ''))
         
         # ====================== URL_MAP (protégé) ======================
         url_map_str = safe_json_dumps(client.get('url_map', {}))
-        url_map_edited = st.text_area("Références du site web à mentionner (JSON)", 
+        url_map_edited = st.text_area(_t("url_map"), 
                                       value=url_map_str, height=150)
         
-        if st.button("✅ Valider le JSON"):
+        if st.button(_t("validate_json")):
             try:
                 json.loads(url_map_edited)
-                st.success("✅ JSON valide !")
+                st.success(_t("json_valid"))
                 st.json(json.loads(url_map_edited))
             except json.JSONDecodeError as e:
-                st.error(f"❌ JSON invalide : {e}")
+                st.error(_t("json_invalid", error=e))
     
-        agent_name = st.text_input("Nom de l'agent", value=client.get('agent_name', 'Amélie'))
+        default_agent = "Emily" if primary_language_selected == "en-US" else "Amélie"
+        agent_name = st.text_input(
+            _t("agent_name"),
+            value=client.get('agent_name') or default_agent,
+        )
         
-        # ====================== TTS PROVIDER + VOIX (Standard + Custom Voice xAI) ======================
-        st.subheader("🗣️ Voix de l'agent virtuel")
+        st.subheader(_t("voice_section"))
     
         # Chargement dynamique des voix depuis Supabase
         voices_response = supabase.table('voices') \
@@ -532,66 +593,63 @@ if selected_client_id:
         eleven_voices = [v for v in all_voices if v['provider'] == 'elevenlabs']
     
         tts_provider_options = [
-            {"value": "xai", "label": "Grok Realtime (voix natives + Custom Voices)"},
-            {"value": "elevenlabs", "label": "ElevenLabs (qualité HD)"}
+            {"value": "xai", "label": _t("tts_xai")},
+            {"value": "elevenlabs", "label": _t("tts_eleven")},
         ]
     
         current_tts = client.get('tts_provider', 'xai')
         default_tts_index = next((i for i, opt in enumerate(tts_provider_options) if opt["value"] == current_tts), 0)
     
-        selected_tts = st.selectbox("Fournisseur de voix", options=tts_provider_options,
+        selected_tts = st.selectbox(_t("tts_provider"), options=tts_provider_options,
                                     format_func=lambda x: x["label"], index=default_tts_index)
         tts_provider_selected = selected_tts["value"]
     
         # === GROK ===
         if tts_provider_selected == "xai":
-            st.caption("📌 Grok Realtime supporte les Custom Voices xAI (depuis mai 2026)")
+            st.caption(_t("grok_caption"))
     
-            # Voix standard
             voice_options = [{"value": v['voice_key'], "label": v['display_label']} for v in grok_voices]
-            current_voice_key = client.get('voice_name', voice_options[0]['value'] if voice_options else "ara")
+            default_voice = "eve" if primary_language_selected == "en-US" else "ara"
+            current_voice_key = client.get('voice_name') or default_voice
             default_voice_index = next((i for i, opt in enumerate(voice_options) if opt["value"] == current_voice_key), 0)
     
-            selected_voice = st.selectbox("Voix standard Grok", options=voice_options,
+            selected_voice = st.selectbox(_t("grok_standard"), options=voice_options,
                                           format_func=lambda x: x["label"], index=default_voice_index)
     
-            # Champ Custom Voice (sécurisé contre None)
             grok_custom_raw = st.text_input(
-                "Voice ID personnalisée xAI (optionnel)",
+                _t("grok_custom"),
                 value=client.get('grok_custom_voice_id', '') or "",
                 placeholder="ex: custom_abc123...",
-                help="Collez le voice_id créé dans la console xAI. S'il est rempli, il sera utilisé à la place de la voix standard."
+                help=_t("grok_custom_help"),
             )
             grok_custom_voice_id = grok_custom_raw.strip() if grok_custom_raw else ""
     
             # Priorité au custom
             if grok_custom_voice_id:
                 voice_value = grok_custom_voice_id
-                st.success(f"✅ Custom Voice activée")
+                st.success(_t("grok_custom_active"))
             else:
                 voice_value = selected_voice["value"]
     
         else:
-            # === ElevenLabs ===
             voice_options = [{"value": v['voice_key'], "label": v['display_label']} for v in eleven_voices]
             current_voice_key = client.get('elevenlabs_voice_id', voice_options[0]['value'] if voice_options else "")
             default_voice_index = next((i for i, opt in enumerate(voice_options) if opt["value"] == current_voice_key), 0)
     
-            selected_voice = st.selectbox("Voix ElevenLabs", options=voice_options,
+            selected_voice = st.selectbox(_t("eleven_voice"), options=voice_options,
                                           format_func=lambda x: x["label"], index=default_voice_index)
             voice_value = selected_voice["value"]
             grok_custom_voice_id = ""
     
-        # Mode de transfert
-        st.subheader("Mode de transfert")
+        st.subheader(_t("transfer_section"))
         transfer_mode_options = [
-            {"value": "blind", "label": "Blind – Transfert immédiat"},
-            {"value": "warm",  "label": "Warm  – Transfert supervisé"},
-            {"value": "none",  "label": "None – Aucun transfert (prise de message)"},
+            {"value": "blind", "label": _t("transfer_blind")},
+            {"value": "warm",  "label": _t("transfer_warm")},
+            {"value": "none",  "label": _t("transfer_none")},
         ]
         current_mode = client.get('transfer_mode', 'none')
         default_mode_index = next((i for i, opt in enumerate(transfer_mode_options) if opt["value"] == current_mode), 2)
-        selected_mode = st.selectbox("Mode de transfert", options=transfer_mode_options, 
+        selected_mode = st.selectbox(_t("transfer_section"), options=transfer_mode_options, 
                                      format_func=lambda x: x["label"], index=default_mode_index)
         transfer_mode_selected = selected_mode["value"]
     
@@ -599,16 +657,16 @@ if selected_client_id:
         transfer_numbers_str = ""
         if transfer_mode_selected != "none":
             transfer_numbers_str = safe_json_dumps(client.get('transfer_numbers', {}))
-            transfer_numbers_edited = st.text_area("Numéros de transfert (JSON)", 
+            transfer_numbers_edited = st.text_area(_t("transfer_numbers"), 
                                                  value=transfer_numbers_str, height=150)
             
-            if st.button("✅ Valider le JSON des transferts"):
+            if st.button(_t("validate_transfer_json")):
                 try:
                     json.loads(transfer_numbers_edited)
-                    st.success("✅ JSON valide !")
+                    st.success(_t("json_valid"))
                     st.json(json.loads(transfer_numbers_edited))
                 except json.JSONDecodeError as e:
-                    st.error(f"❌ JSON invalide : {e}")
+                    st.error(_t("json_invalid", error=e))
         else:
             transfer_numbers_edited = "{}"  # pour le save
     
@@ -616,27 +674,26 @@ if selected_client_id:
         col1, col2, col3, col4 = st.columns(4)
         with col1:
             get_caller_history_flag = st.toggle(
-                "Activé mémoire de l'appelant", 
+                _t("toggle_memory"), 
                 value=client.get('get_caller_history_flag', False)
             )
         with col2:
             call_transcription_flag = st.toggle(
-                "Activé la transcription de l'appel", 
+                _t("toggle_transcription"), 
                 value=client.get('call_transcription_flag', False)
             )
         with col3:
             confirmation_required = st.toggle(
-                "Confirmation requise sur prise de message",
+                _t("toggle_confirmation"),
                 value=client.get('confirmation_required', True)
             )
         with col4:
             hangup_message_flag = st.toggle(
-                "Envois message sur raccrochement prématuré",
+                _t("toggle_hangup_sms"),
                 value=client.get('hangup_message_flag', False)
             )
     
-        # ====================== GOOGLE CALENDAR ======================
-        st.subheader("📅 Connexion au calendrier Google pour prise de rendez-vous")
+        st.subheader(_t("google_section"))
         fresh_client = next((c for c in get_clients() if c['id'] == selected_client_id), client)
         current_token = fresh_client.get('google_refresh_token')
         has_google = bool(current_token)
@@ -644,32 +701,31 @@ if selected_client_id:
         col_connect, col_disconnect = st.columns([3, 2])
         with col_connect:
             if has_google:
-                st.success("✅ Calendrier Google **connecté**")
+                st.success(_t("google_connected"))
             else:
-                if st.button("🔗 Connecter le calendrier Google de ce client", type="primary"):
+                if st.button(_t("google_connect"), type="primary"):
                     SCOPES = ['https://www.googleapis.com/auth/calendar']
                     flow = InstalledAppFlow.from_client_secrets_file("client_secrets.json", scopes=SCOPES)
                     credentials = flow.run_local_server(port=8502, prompt='consent')
                     if credentials and credentials.refresh_token:
                         supabase.table("clients").update({"google_refresh_token": credentials.refresh_token}).eq("id", selected_client_id).execute()
-                        st.success("🎉 Calendrier connecté !")
+                        st.success(_t("google_connected_ok"))
                         st.rerun()
                     else:
-                        st.error("Aucun refresh_token reçu.")
+                        st.error(_t("google_no_token"))
     
         with col_disconnect:
             if has_google:
-                if st.button("❌ Dissocier le calendrier Google", type="secondary"):
+                if st.button(_t("google_disconnect"), type="secondary"):
                     supabase.table("clients").update({"google_refresh_token": None}).eq("id", selected_client_id).execute()
-                    st.success("🎉 Token supprimé avec succès !")
+                    st.success(_t("google_removed"))
                     st.rerun()
     
-        # ====================== BOUTON SAUVEGARDER ======================
-        if st.button("💾 Sauvegarder la configuration", type="primary"):
+        if st.button(_t("save_config"), type="primary"):
             try:
                 url_map_parsed = json.loads(url_map_edited) if url_map_edited.strip() else {}
             except:
-                st.error("JSON url_map invalide")
+                st.error(_t("url_map_invalid"))
                 st.stop()
     
             transfer_numbers_parsed = {}
@@ -677,7 +733,7 @@ if selected_client_id:
                 try:
                     transfer_numbers_parsed = json.loads(transfer_numbers_edited) if transfer_numbers_edited.strip() else {}
                 except:
-                    st.error("JSON transfer_numbers invalide")
+                    st.error(_t("transfer_json_invalid"))
                     st.stop()
             else:
                 transfer_numbers_parsed = client.get('transfer_numbers', {}) or {}
@@ -689,6 +745,8 @@ if selected_client_id:
             ]
     
             updated_data = {
+                'primary_language': primary_language_selected,
+                'timezone': timezone_selected,
                 'company_name': company_name,
                 'company_address': company_address,
                 'company_hours': company_hours,
@@ -711,12 +769,12 @@ if selected_client_id:
                 'hangup_message_flag': hangup_message_flag
             }
             update_client(selected_client_id, updated_data)
-            st.success("✅ Configuration sauvegardée avec succès !")
+            st.success(_t("save_ok"))
             st.rerun()
     
     # ====================== TAB HISTORIQUE DES APPELS + ÉCOUTE WAV (MIS À JOUR) ======================
     with tab_appels:
-        st.subheader(f"📞 Historique des appels – {selected_client_id}")
+        st.subheader(_t("calls_history", client_id=selected_client_id))
         
         appels_response = supabase.table('vw_appels_clients') \
             .select('*') \
@@ -728,8 +786,6 @@ if selected_client_id:
         if appels_response.data:
             df = pd.DataFrame(appels_response.data)
             
-            # Format Montréal (version robuste)
-            tz_montreal = pytz.timezone('America/Montreal')
             for col in ['started_at', 'appointment_start']:
                 if col in df.columns:
                     df[col] = pd.to_datetime(df[col], errors='coerce')
@@ -737,22 +793,22 @@ if selected_client_id:
                     if mask.any():
                         if df.loc[mask, col].dt.tz is None:
                             df.loc[mask, col] = df.loc[mask, col].dt.tz_localize('UTC')
-                        df.loc[mask, col] = df.loc[mask, col].dt.tz_convert(tz_montreal)
+                        df.loc[mask, col] = df.loc[mask, col].dt.tz_convert(client_tz)
                                     
             # ====================== NOUVELLE COLONNE "ISSUE / ACTION" ======================
             def get_issue_label(row):
                 if row.get('appointment_booked'):
-                    return "📅 RDV réservé"
+                    return _t("issue_appointment")
                 elif row.get('message_taken'):
-                    return "📩 Message laissé"
+                    return _t("issue_message")
                 elif row.get('transfer_success'):
-                    return "🔄 Transféré"
+                    return _t("issue_transfer")
                 elif row.get('status') == 'abandoned':
-                    return "❌ Abandonné"
+                    return _t("issue_abandoned")
                 else:
-                    return "✅ Terminé"
+                    return _t("issue_done")
 
-            df['Résultat / Action'] = df.apply(get_issue_label, axis=1)
+            df[_t("result_action")] = df.apply(get_issue_label, axis=1)
 
             def get_detail(row):
                 if row.get('message_taken'):
@@ -767,16 +823,17 @@ if selected_client_id:
                 else:
                     return "—"
 
-            df['Détail'] = df.apply(get_detail, axis=1)
+            df[_t("detail")] = df.apply(get_detail, axis=1)
 
             def color_issue(val):
-                if "RDV" in str(val):
+                val_str = str(val)
+                if "📅" in val_str:
                     return 'background-color: #d4edda; color: #155724; font-weight: bold'
-                elif "Message" in str(val):
+                elif "📩" in val_str:
                     return 'background-color: #cce5ff; color: #004085; font-weight: bold'
-                elif "Transféré" in str(val):
+                elif "🔄" in val_str:
                     return 'background-color: #fff3cd; color: #856404; font-weight: bold'
-                elif "Abandonné" in str(val):
+                elif "❌" in val_str:
                     return 'background-color: #f8d7da; color: #721c24; font-weight: bold'
                 else:
                     return 'background-color: #e2e3e5; color: #383d41'
@@ -793,7 +850,7 @@ if selected_client_id:
             # Colonnes du tableau
             display_columns = [
                 'call_date', 'call_time', 'caller_number',
-                '🎧', 'status_label', 'Résultat / Action', 'Détail',
+                '🎧', 'status_label', _t("result_action"), _t("detail"),
                 'appointment_start', 'appointment_name', 'duration_formatted',
                 'transcript_preview'
             ]
@@ -805,9 +862,9 @@ if selected_client_id:
                 return [''] * len(row)
             
             styled_df = df[available_cols].style.apply(highlight_rdv, axis=1)
-            styled_df = styled_df.map(color_issue, subset=['Résultat / Action'])
+            styled_df = styled_df.map(color_issue, subset=[_t("result_action")])
             
-            st.caption("👇 Clique sur une ligne pour afficher la transcription + écouter l’enregistrement")
+            st.caption(_t("calls_click_hint"))
             event = st.dataframe(
                 styled_df,
                 use_container_width=True,
@@ -819,7 +876,7 @@ if selected_client_id:
             
             # Téléchargement CSV
             csv = df.to_csv(index=False).encode('utf-8')
-            st.download_button("📥 Télécharger en CSV", csv, 
+            st.download_button(_t("download_csv"), csv, 
                              f"appels_{selected_client_id}.csv", "text/csv")
 
             # ====================== DÉTAIL SÉLECTIONNÉ ======================
@@ -827,13 +884,11 @@ if selected_client_id:
                 row = df.iloc[event.selection.rows[0]]
                 
                 st.divider()
-                st.subheader(f"🔊 Appel du {row.get('call_date')} {row.get('call_time')} — {row.get('caller_number')}")
+                st.subheader(_t("call_detail", date=row.get('call_date'), time=row.get('call_time'), caller=row.get('caller_number')))
                 
-                # Statut RDV en évidence
-                st.markdown(f"**Statut du rendez-vous :** {row.get('statut_rdv', '—')}")
+                st.markdown(f"**{_t('appointment_status')} :** {row.get('statut_rdv', '—')}")
 
-                # === LECTEUR AUDIO ===
-                st.subheader("🎧 Enregistrement de l'appel")
+                st.subheader(_t("recording"))
                 recording_url = row.get('recording_url')
                 if recording_url and isinstance(recording_url, str) and recording_url.startswith('http'):
                     try:
@@ -842,37 +897,36 @@ if selected_client_id:
                         response = requests.get(recording_url, auth=(account_sid, auth_token), timeout=15)
                         if response.status_code == 200:
                             audio_bytes = response.content
-                            st.success("✅ Enregistrement chargé avec succès")
+                            st.success(_t("recording_ok"))
                             st.audio(audio_bytes, format="audio/wav")
                             st.download_button(
-                                label="📥 Télécharger l'enregistrement WAV",
+                                label=_t("download_wav"),
                                 data=audio_bytes,
                                 file_name=f"appel_{row.get('caller_number','inconnu')}_{row.get('call_date','')}.wav",
                                 mime="audio/wav"
                             )
                         else:
-                            st.error(f"❌ Twilio a refusé l'accès (code {response.status_code})")
+                            st.error(_t("recording_denied", code=response.status_code))
                     except Exception as e:
-                        st.error(f"Erreur lors du chargement : {str(e)}")
+                        st.error(_t("recording_error", error=str(e)))
                 else:
-                    st.info("🔇 Aucun enregistrement disponible pour cet appel.")
+                    st.info(_t("no_recording"))
                 
-                # === TRANSCRIPTION ===
-                st.subheader("📝 Transcription complète")
+                st.subheader(_t("transcript_full"))
                 transcript = row.get('transcript', '')
                 if transcript and str(transcript).strip():
-                    st.text_area("Transcription complète", transcript, height=380)
+                    st.text_area(_t("transcript_full"), transcript, height=380)
                 else:
-                    st.info("Aucune transcription disponible.")
+                    st.info(_t("no_transcript"))
             else:
-                st.info("Sélectionnez une ligne dans le tableau ci-dessus.")
+                st.info(_t("select_row"))
                 
         else:
-            st.info("Aucun appel enregistré pour le moment.")
+            st.info(_t("no_calls_yet"))
 
     # ====================== TAB STATISTIQUES – VERSION FINALE ULTRA-ROBUSTE ======================
     with tab_stats:
-        st.subheader(f"📊 Statistiques détaillées – {selected_client_id}")
+        st.subheader(_t("stats_for", client_id=selected_client_id))
         
         # 1. Métriques rapides depuis la vue agrégée
         stats_response = supabase.table('vw_stats_appels_clients') \
@@ -913,39 +967,38 @@ if selected_client_id:
     
             # Métriques principales
             col1, col2, col3, col4, col5, col6, col7, col8 = st.columns(8)
-            with col1: st.metric("📞 Total appels", total)
-            with col2: st.metric("✅ Complétés", completes)
-            with col3: st.metric("📅 RDV réservés", booked, delta=f"{pourcent_rdv:.1f}%")
-            with col4: st.metric("✅ RDV confirmés", confirmed)
-            with col5: st.metric("❌ RDV annulés", cancelled)
-            with col6: st.metric("📵 Abandonnés", appels_abandonnes, delta=f"{taux_abandon:.1f}%")
-            with col7: st.metric("⏱️ Durée moyenne", f"{duree_moy:.1f} s")
-            with col8: st.metric("🎯 Taux confirmation RDV", f"{taux_confirmation:.1f}%")
+            with col1: st.metric(_t("metric_total"), total)
+            with col2: st.metric(_t("metric_completed"), completes)
+            with col3: st.metric(_t("metric_appointments"), booked, delta=f"{pourcent_rdv:.1f}%")
+            with col4: st.metric(_t("metric_confirmed_short"), confirmed)
+            with col5: st.metric(_t("metric_cancelled_short"), cancelled)
+            with col6: st.metric(_t("metric_abandoned"), appels_abandonnes, delta=f"{taux_abandon:.1f}%")
+            with col7: st.metric(_t("metric_avg_duration"), f"{duree_moy:.1f} s")
+            with col8: st.metric(_t("metric_confirm_rate"), f"{taux_confirmation:.1f}%")
     
             st.divider()
             colA, colB, colC, colD = st.columns(4)
-            with colA: st.metric("🔄 Appels transférés (tentés)", transferred)
-            with colB: st.metric("✅ Transferts réussis", transferred_success, 
+            with colA: st.metric(_t("metric_transfers_tried"), transferred)
+            with colB: st.metric(_t("metric_transfers_ok"), transferred_success, 
                                 delta=f"{(transferred_success / transferred * 100) if transferred > 0 else 0:.1f}%")
-            with colC: st.metric("📩 Messages pris", messages_pris)
-            with colD: st.metric("📞 Appels normaux", total - transferred - messages_pris)
+            with colC: st.metric(_t("metric_messages"), messages_pris)
+            with colD: st.metric(_t("metric_normal"), total - transferred - messages_pris)
     
-            st.caption(f"**Funnel :** {total} appels → {booked} RDV → {confirmed} confirmés | {transferred} transférés | {messages_pris} messages")
+            st.caption(_t("funnel", total=total, booked=booked, confirmed=confirmed, transferred=transferred, messages=messages_pris))
     
-            # ====================== GRAPHES PLOTLY ======================
             st.divider()
-            st.subheader("📈 Visualisations")
+            st.subheader(_t("charts"))
     
             col_g1, col_g2 = st.columns(2)
     
             # Pie chart (toujours OK)
             with col_g1:
                 repartition = pd.DataFrame({
-                    "Type": ["Appels normaux", "Appels transférés", "Messages pris"],
+                    "Type": [_t("chart_pie_normal"), _t("chart_pie_transfer"), _t("chart_pie_message")],
                     "Nombre": [total - transferred - messages_pris, transferred, messages_pris]
                 })
                 fig_pie = px.pie(repartition, values="Nombre", names="Type",
-                               title="Répartition des types d'appels",
+                               title=_t("chart_pie_title"),
                                color_discrete_sequence=px.colors.sequential.Blues)
                 st.plotly_chart(fig_pie, use_container_width=True)
     
@@ -957,25 +1010,23 @@ if selected_client_id:
                     
                     if len(reasons) > 0:
                         fig_bar = px.bar(
-                            x=reasons.index.tolist(),   # forcé en liste
-                            y=reasons.values.tolist(),   # forcé en liste
-                            labels={"x": "Motif du RDV", "y": "Nombre"},
-                            title="Top 8 des motifs de rendez-vous"
+                            x=reasons.index.tolist(),
+                            y=reasons.values.tolist(),
+                            labels={"x": _t("chart_bar_x"), "y": _t("chart_bar_y")},
+                            title=_t("chart_bar_title"),
                         )
                         st.plotly_chart(fig_bar, use_container_width=True)
                     else:
-                        st.info("ℹ️ Aucun motif de rendez-vous enregistré pour l’instant.")
+                        st.info(_t("no_reasons"))
                 else:
-                    st.info("ℹ️ Aucun motif de rendez-vous disponible pour ce client.")
+                    st.info(_t("no_reasons_client"))
     
-            # ====================== TABLEAU DÉTAILLÉ ======================
             st.divider()
-            st.subheader("📋 Détail par appel")
+            st.subheader(_t("detail_table"))
             
-            # === NOUVEAU : Choix du tri ===
             sort_option = st.selectbox(
-                "Trier les appels par date",
-                options=["Les plus récents d'abord", "Les plus anciens d'abord"],
+                _t("sort_calls"),
+                options=[_t("sort_newest"), _t("sort_oldest")],
                 index=0,
                 key=f"stats_sort_{selected_client_id}"
             )
@@ -985,7 +1036,7 @@ if selected_client_id:
             
             if not df_sorted.empty and 'started_at' in df_sorted.columns:
                 df_sorted['started_at'] = pd.to_datetime(df_sorted['started_at'], errors='coerce')
-                ascending = sort_option == "Les plus anciens d'abord"
+                ascending = sort_option == _t("sort_oldest")
                 df_sorted = df_sorted.sort_values(by='started_at', ascending=ascending).reset_index(drop=True)
             elif not df_sorted.empty:
                 # Fallback si started_at n'existe pas
@@ -1010,9 +1061,9 @@ if selected_client_id:
     
             # Export CSV
             csv = df_detail.to_csv(index=False).encode('utf-8')
-            st.download_button("📥 Télécharger tout en CSV", csv, 
+            st.download_button(_t("download_all_csv"), csv, 
                              f"stats_detaillees_{selected_client_id}.csv", "text/csv")
         
         else:
-            st.info("Aucune statistique disponible pour ce client pour l’instant.")
+            st.info(_t("no_stats_client"))
             
