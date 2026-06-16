@@ -1,6 +1,7 @@
 import streamlit as st
 import json
 import pandas as pd
+from pathlib import Path
 from supabase import create_client, Client
 from datetime import datetime, timedelta
 import pytz
@@ -23,6 +24,18 @@ from i18n import (
 
 def _t(key: str, **kwargs) -> str:
     return t(key, st.session_state, **kwargs)
+
+
+APP_DIR = Path(__file__).resolve().parent
+LOGO_PATH = APP_DIR / "assets" / "telnek_logo.png"
+
+
+def render_app_header() -> None:
+    col_logo, col_title = st.columns([1, 5], vertical_alignment="center")
+    with col_logo:
+        st.image(str(LOGO_PATH), width=240)
+    with col_title:
+        st.markdown(f"## {_t('app_subtitle')}")
 
 # ==================== CONNEXION SUPABASE (avec gestion d'erreur conviviale) ====================
 def init_supabase():
@@ -196,8 +209,8 @@ def update_client(client_id, data):
     return supabase.table('clients').update(data).eq('id', client_id).execute()
 
 # ==================== INTERFACE ====================
-st.set_page_config(page_title=_t("page_title"), page_icon="📞", layout="wide")
-st.title(_t("app_title"))
+st.set_page_config(page_title=_t("page_title"), page_icon=str(LOGO_PATH), layout="wide")
+render_app_header()
 
 # ==================== GATE D'AUTHENTIFICATION ====================
 if not st.session_state.get("authenticated", False):

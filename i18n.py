@@ -40,7 +40,7 @@ _IANA_SET = {opt["iana"] for opt in TIMEZONE_OPTIONS}
 TRANSLATIONS: dict[str, dict[str, str]] = {
     "fr": {
         "page_title": "Amélie - Telnek AI",
-        "app_title": "📞 Telnek – Réceptionniste IA",
+        "app_subtitle": "Réceptionniste IA",
         "ui_language": "Langue de l'interface",
         "login_required": "🔐 Connexion requise",
         "login_caption": "Utilisez les identifiants Supabase Auth associés à votre profil (admin ou client).",
@@ -194,7 +194,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
     },
     "en": {
         "page_title": "Emily - Telnek AI",
-        "app_title": "📞 Telnek – AI Receptionist",
+        "app_subtitle": "AI Receptionist",
         "ui_language": "Interface language",
         "login_required": "🔐 Sign in required",
         "login_caption": "Use your Supabase Auth credentials linked to your profile (admin or client).",
