@@ -60,49 +60,6 @@ def init_supabase():
         return create_client(supabase_url, supabase_key)
     except Exception:
         st.error("❌ **Fichier de secrets Streamlit manquant ou incomplet**", icon="🔐")
-
-        st.markdown(r"""
-        L'application n'a pas pu lire les variables de configuration (`SUPABASE_URL`, etc.).
-
-        **Emplacements valides pour le fichier `secrets.toml` :**
-        1. **Recommandé (projet)** :  
-           `C:\chemin\vers\votre\projet\.streamlit\secrets.toml`
-        2. **Global (utilisateur)** :  
-           `C:\Users\VotreNom\.streamlit\secrets.toml`
-        """)
-
-        st.subheader("Étapes pour corriger :")
-
-        st.markdown(r"""
-        1. Dans l'explorateur de fichiers, allez dans le dossier du projet.
-
-        2. Créez un **nouveau dossier** nommé exactement `.streamlit` (le point est important).
-
-        3. À l'intérieur de ce dossier `.streamlit`, créez un fichier texte nommé `secrets.toml`.
-
-        4. Collez dedans au minimum ceci (remplacez par vos vraies valeurs) :
-        """)
-
-        st.code("""SUPABASE_URL = "https://ton-projet.supabase.co"
-SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-
-# Obligatoire pour la lecture des enregistrements audio dans l'onglet Historique
-TWILIO_ACCOUNT_SID = "ACxxxxxxxxxxxxxxxxxxxxxxxx"
-TWILIO_AUTH_TOKEN = "your_auth_token_ici"
-""", language="toml")
-
-        st.info("""
-        **Pour tester rapidement sans les vrais comptes :**
-        Ajoutez dans `.streamlit/secrets.toml` :
-
-        DEV_BYPASS_AUTH = true
-        # Pour simuler un client restreint :
-        # DEV_BYPASS_ROLE = "client"
-        # DEV_BYPASS_CLIENT_ID = "un-vrai-client-id"
-
-        Laissez désactivé en utilisation normale.
-        """)
-
         stop_app()
 
 supabase: Client = init_supabase()
