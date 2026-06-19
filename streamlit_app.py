@@ -10,6 +10,20 @@ import requests
 from streamlit_autorefresh import st_autorefresh
 import plotly.express as px
 
+from call_metrics import (
+    aggregate_call_metrics,
+    breakdown_line_items,
+    enrich_calls_dataframe,
+    has_latency_metrics,
+    latency_assistant_turns,
+    latency_e2e_avg,
+    latency_playback_avg,
+    latency_transcription_avg,
+    latency_user_turns,
+    pricing_mode,
+    cost_per_second,
+    cost_usd,
+)
 from i18n import (
     PRIMARY_LANGUAGES,
     TIMEZONE_OPTIONS,
@@ -45,6 +59,92 @@ def render_app_footer() -> None:
         f'{_t("copyright_footer")}</p>',
         unsafe_allow_html=True,
     )
+
+
+def _format_seconds(value) -> str:
+    if value is None or (isinstance(value, float) and pd.isna(value)):
+        return "—"
+    try:
+        return f"{float(value):.2f} s"
+    except (TypeError, ValueError):
+        return "—"
+
+
+def _format_usd(value) -> str:
+    if value is None or (isinstance(value, float) and pd.isna(value)):
+        return "—"
+    try:
+        return f"${float(value):.4f}"
+    except (TypeError, ValueError):
+        return "—"
+
+
+def _add_latency_cost_display_columns(df: pd.DataFrame) -> pd.DataFrame:
+    enriched = enrich_calls_dataframe(df)
+    enriched[_t("col_e2e_latency")] = enriched["_primary_latency_avg"].map(_format_seconds)
+    enriched[_t("col_transcription_delay")] = enriched["_transcription_delay_avg"].map(
+        _format_seconds
+    )
+    enriched[_t("col_estimated_cost")] = enriched["_estimated_cost_usd"].map(_format_usd)
+    enriched[_t("col_pricing_mode")] = enriched["_pricing_mode"].fillna("—")
+    return enriched
+
+
+def render_call_metrics_detail(row: pd.Series) -> None:
+    latency_raw = row.get("latency_metrics")
+    e2e = latency_e2e_avg(latency_raw)
+    playback = latency_playback_avg(latency_raw)
+    transcription = latency_transcription_avg(latency_raw)
+    user_turns = latency_user_turns(latency_raw)
+    assistant_turns = latency_assistant_turns(latency_raw)
+
+    st.subheader(_t("latency_section"))
+    if not has_latency_metrics(latency_raw):
+        st.info(_t("no_latency_data"))
+    else:
+        col_l1, col_l2, col_l3, col_l4 = st.columns(4)
+        with col_l1:
+            st.metric(_t("latency_e2e"), _format_seconds(e2e))
+        with col_l2:
+            st.metric(_t("latency_playback"), _format_seconds(playback))
+        with col_l3:
+            st.metric(_t("latency_transcription"), _format_seconds(transcription))
+        with col_l4:
+            st.metric(
+                _t("latency_user_turns"),
+                user_turns if user_turns is not None else "—",
+            )
+        if assistant_turns is not None:
+            st.caption(
+                f"{_t('latency_assistant_turns')} : **{assistant_turns}**"
+            )
+        if e2e is None and playback is not None:
+            st.caption(_t("latency_playback_only_hint"))
+
+    estimated = cost_usd(row.get("estimated_cost_usd"))
+    mode = pricing_mode(row.get("cost_breakdown"))
+    per_second = cost_per_second(row.get("cost_breakdown"))
+
+    st.subheader(_t("cost_section"))
+    if estimated is None:
+        st.info(_t("no_cost_data"))
+    else:
+        col_c1, col_c2, col_c3 = st.columns(3)
+        with col_c1:
+            st.metric(_t("cost_total"), _format_usd(estimated))
+        with col_c2:
+            st.metric(_t("cost_per_second"), _format_usd(per_second))
+        with col_c3:
+            st.metric(_t("cost_mode"), mode or "—")
+
+        items = breakdown_line_items(row.get("cost_breakdown"))
+        if items:
+            st.markdown(f"**{_t('cost_breakdown')}**")
+            st.dataframe(
+                pd.DataFrame(items),
+                use_container_width=True,
+                hide_index=True,
+            )
 
 
 def stop_app() -> None:
@@ -771,7 +871,7 @@ if selected_client_id:
             .execute()
 
         if appels_response.data:
-            df = pd.DataFrame(appels_response.data)
+            df = _add_latency_cost_display_columns(pd.DataFrame(appels_response.data))
 
             for col in ['started_at', 'appointment_start']:
                 if col in df.columns:
@@ -839,6 +939,8 @@ if selected_client_id:
                 'call_date', 'call_time', 'caller_number',
                 '🎧', 'status_label', _t("result_action"), _t("detail"),
                 'appointment_start', 'appointment_name', 'duration_formatted',
+                _t("col_e2e_latency"), _t("col_transcription_delay"),
+                _t("col_estimated_cost"), _t("col_pricing_mode"),
                 'transcript_preview'
             ]
             available_cols = [col for col in display_columns if col in df.columns]
@@ -874,6 +976,8 @@ if selected_client_id:
                 st.subheader(_t("call_detail", date=row.get('call_date'), time=row.get('call_time'), caller=row.get('caller_number')))
 
                 st.markdown(f"**{_t('appointment_status')} :** {row.get('statut_rdv', '—')}")
+
+                render_call_metrics_detail(row)
 
                 st.subheader(_t("recording"))
                 recording_url = row.get('recording_url')
@@ -948,10 +1052,16 @@ if selected_client_id:
             messages_pris = 0
 
             if appels_response.data:
-                df_detail = pd.DataFrame(appels_response.data)
+                df_detail = _add_latency_cost_display_columns(
+                    pd.DataFrame(appels_response.data)
+                )
                 transferred = len(df_detail[df_detail['transfer_attempted'] == True])
                 transferred_success = len(df_detail[df_detail['transfer_success'] == True])
                 messages_pris = len(df_detail[df_detail['message_taken'] == True])
+            else:
+                df_detail = pd.DataFrame()
+
+            metrics_summary = aggregate_call_metrics(df_detail)
 
             # Métriques principales
             col1, col2, col3, col4, col5, col6, col7, col8 = st.columns(8)
@@ -973,6 +1083,34 @@ if selected_client_id:
             with colD: st.metric(_t("metric_normal"), total - transferred - messages_pris)
 
             st.caption(_t("funnel", total=total, booked=booked, confirmed=confirmed, transferred=transferred, messages=messages_pris))
+
+            st.divider()
+            st.subheader(_t("latency_section"))
+            col_m1, col_m2, col_m3, col_m4, col_m5, col_m6 = st.columns(6)
+            with col_m1:
+                st.metric(
+                    _t("metric_avg_e2e_latency"),
+                    _format_seconds(metrics_summary["avg_e2e_latency_s"]),
+                )
+            with col_m2:
+                st.metric(
+                    _t("metric_avg_transcription_delay"),
+                    _format_seconds(metrics_summary["avg_transcription_delay_s"]),
+                )
+            with col_m3:
+                st.metric(_t("metric_calls_with_latency"), metrics_summary["calls_with_latency"])
+            with col_m4:
+                st.metric(
+                    _t("metric_avg_call_cost"),
+                    _format_usd(metrics_summary["avg_cost_usd"]),
+                )
+            with col_m5:
+                st.metric(
+                    _t("metric_total_call_cost"),
+                    _format_usd(metrics_summary["total_cost_usd"]),
+                )
+            with col_m6:
+                st.metric(_t("metric_calls_with_cost"), metrics_summary["calls_with_cost"])
 
             st.divider()
             st.subheader(_t("charts"))
@@ -1009,6 +1147,36 @@ if selected_client_id:
                 else:
                     st.info(_t("no_reasons_client"))
 
+            if not df_detail.empty and metrics_summary["calls_with_latency"] > 0:
+                recent = df_detail.dropna(subset=["_primary_latency_avg"]).head(30).copy()
+                if not recent.empty and "call_date" in recent.columns:
+                    fig_latency = px.bar(
+                        recent,
+                        x="call_date",
+                        y="_primary_latency_avg",
+                        labels={
+                            "call_date": _t("sort_calls"),
+                            "_primary_latency_avg": _t("latency_primary"),
+                        },
+                        title=_t("chart_latency_title"),
+                    )
+                    st.plotly_chart(fig_latency, use_container_width=True)
+
+            if not df_detail.empty and metrics_summary["calls_with_cost"] > 0:
+                recent_cost = df_detail.dropna(subset=["_estimated_cost_usd"]).head(30).copy()
+                if not recent_cost.empty and "call_date" in recent_cost.columns:
+                    fig_cost = px.bar(
+                        recent_cost,
+                        x="call_date",
+                        y="_estimated_cost_usd",
+                        labels={
+                            "call_date": _t("sort_calls"),
+                            "_estimated_cost_usd": _t("cost_total"),
+                        },
+                        title=_t("chart_cost_title"),
+                    )
+                    st.plotly_chart(fig_cost, use_container_width=True)
+
             st.divider()
             st.subheader(_t("detail_table"))
 
@@ -1031,10 +1199,16 @@ if selected_client_id:
                 df_sorted = df_sorted.sort_values(by=['call_date', 'call_time'], ascending=False)
 
             # Préparation du tableau d'affichage
-            df_display = df_sorted[['call_date', 'call_time', 'caller_number', 'status',
-                                   'transfer_attempted', 'transfer_success', 'message_taken',
-                                   'appointment_booked', 'appointment_confirmed', 'appointment_cancelled',
-                                   'appointment_reason']].copy()        
+            detail_columns = [
+                'call_date', 'call_time', 'caller_number', 'status',
+                'transfer_attempted', 'transfer_success', 'message_taken',
+                'appointment_booked', 'appointment_confirmed', 'appointment_cancelled',
+                'appointment_reason',
+                _t("col_e2e_latency"), _t("col_transcription_delay"),
+                _t("col_estimated_cost"), _t("col_pricing_mode"),
+            ]
+            available_detail_cols = [c for c in detail_columns if c in df_sorted.columns]
+            df_display = df_sorted[available_detail_cols].copy()
             def color_row(row):
                 if row.get('appointment_confirmed', False):
                     return ['background-color: #d4edda'] * len(row)
