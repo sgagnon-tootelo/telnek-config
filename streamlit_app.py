@@ -44,6 +44,49 @@ def _t(key: str, **kwargs) -> str:
 APP_DIR = Path(__file__).resolve().parent
 LOGO_PATH = APP_DIR / "assets" / "telnek_logo.png"
 
+NAV_PAGE_GLOBAL = "global"
+NAV_PAGE_CONFIG = "config"
+NAV_PAGE_CALLS = "calls"
+NAV_PAGE_STATS = "stats"
+
+ADMIN_NAV_PAGES = [
+    NAV_PAGE_GLOBAL,
+    NAV_PAGE_CONFIG,
+    NAV_PAGE_CALLS,
+    NAV_PAGE_STATS,
+]
+CLIENT_NAV_PAGES = [
+    NAV_PAGE_CONFIG,
+    NAV_PAGE_CALLS,
+    NAV_PAGE_STATS,
+]
+
+NAV_PAGE_LABEL_KEYS = {
+    NAV_PAGE_GLOBAL: "tab_global",
+    NAV_PAGE_CONFIG: "tab_config",
+    NAV_PAGE_CALLS: "tab_calls",
+    NAV_PAGE_STATS: "tab_stats",
+}
+
+
+def nav_pages_for_role(is_admin: bool) -> list[str]:
+    return ADMIN_NAV_PAGES if is_admin else CLIENT_NAV_PAGES
+
+
+def default_nav_page(is_admin: bool) -> str:
+    return NAV_PAGE_GLOBAL if is_admin else NAV_PAGE_CONFIG
+
+
+def nav_page_label(page: str, t_fn=_t) -> str:
+    return t_fn(NAV_PAGE_LABEL_KEYS[page])
+
+
+def ensure_nav_page(is_admin: bool) -> None:
+    allowed = nav_pages_for_role(is_admin)
+    current = st.session_state.get("main_nav_page")
+    if current not in allowed:
+        st.session_state.main_nav_page = default_nav_page(is_admin)
+
 
 def render_brand_subtitle() -> None:
     subtitle = _t("app_subtitle")
@@ -344,8 +387,16 @@ def logout_user():
         pass
 
     # Nettoyage complet de la session
-    keys_to_clear = ["authenticated", "user_email", "user_role", "user_client_id", "profile",
-                     "main_client_selector"]  # on nettoie aussi la clé du selectbox pour éviter les résidus
+    keys_to_clear = [
+        "authenticated",
+        "user_email",
+        "user_role",
+        "user_client_id",
+        "profile",
+        "main_client_selector",
+        "main_nav_page",
+        "admin_tab_index",
+    ]
     for k in keys_to_clear:
         if k in st.session_state:
             del st.session_state[k]
@@ -409,8 +460,58 @@ if not st.session_state.get("authenticated", False):
 
 render_app_header()
 
-# ==================== SIDEBAR UTILISATEUR + DÉCONNEXION ====================
+# ==================== DONNÉES CLIENTS ====================
+clients = get_clients()
+
+if not clients:
+    st.error(_t("no_clients"))
+    stop_app()
+
+is_admin = st.session_state.get("user_role") == "admin"
+clients_sorted = sorted(clients, key=lambda c: c.get("id", "").lower())
+client_ids = [c["id"] for c in clients_sorted if c.get("id")]
+ensure_nav_page(is_admin)
+
+# ==================== SIDEBAR : NAV + CLIENT + SESSION ====================
 with st.sidebar:
+    st.markdown(f"### {_t('nav_section')}")
+    nav_pages = nav_pages_for_role(is_admin)
+    nav_page = st.radio(
+        _t("nav_section"),
+        options=nav_pages,
+        format_func=nav_page_label,
+        key="main_nav_page",
+        label_visibility="collapsed",
+    )
+
+    st.divider()
+    st.markdown(f"### {_t('client_section')}")
+
+    if is_admin:
+        prev_value = st.session_state.get("main_client_selector")
+        default_index = client_ids.index(prev_value) if prev_value in client_ids else 0
+        selected_client_id = st.selectbox(
+            _t("select_client"),
+            options=client_ids,
+            key="main_client_selector",
+            index=default_index,
+            label_visibility="collapsed",
+        )
+    else:
+        selected_client_id = client_ids[0] if client_ids else None
+        if selected_client_id:
+            company_name = next(
+                (
+                    c.get("company_name", selected_client_id)
+                    for c in clients
+                    if c["id"] == selected_client_id
+                ),
+                selected_client_id,
+            )
+            st.markdown(f"**{company_name}**")
+            st.caption(f"`{selected_client_id}`")
+
+    st.divider()
     st.selectbox(
         _t("ui_language"),
         options=["fr", "en"],
@@ -420,7 +521,7 @@ with st.sidebar:
     st.divider()
     st.markdown(f"### {_t('session')}")
     st.markdown(f"**{st.session_state.get('user_email', '—')}**")
-    role = st.session_state.get('user_role', '—')
+    role = st.session_state.get("user_role", "—")
     role_emoji = "🛡️" if role == "admin" else "👤"
     st.markdown(f"{_t('role')} : {role_emoji} **{role}**")
 
@@ -431,37 +532,6 @@ with st.sidebar:
     if st.button(_t("logout"), type="secondary", use_container_width=True):
         logout_user()
 
-# ==================== SÉLECTION DU CLIENT (RÔLE-AWARE) ====================
-clients = get_clients()
-
-if not clients:
-    st.error(_t("no_clients"))
-    stop_app()
-
-is_admin = (st.session_state.get("user_role") == "admin")
-
-# Tri stable par ID
-clients_sorted = sorted(clients, key=lambda c: c.get('id', '').lower())
-client_ids = [c['id'] for c in clients_sorted if c.get('id')]
-
-if is_admin:
-    # Comportement original pour les admins : choix libre parmi tous les clients
-    # Utilise la session_state gérée par la key du widget (plus robuste que locals())
-    prev_value = st.session_state.get("main_client_selector")
-    default_index = client_ids.index(prev_value) if prev_value in client_ids else 0
-    selected_client_id = st.selectbox(
-        _t("select_client"),
-        options=client_ids,
-        key="main_client_selector",
-        index=default_index
-    )
-else:
-    # Utilisateur client : un seul client possible → auto-sélection + affichage clair
-    selected_client_id = client_ids[0] if client_ids else None
-    if selected_client_id:
-        company_name = next((c.get('company_name', selected_client_id) for c in clients if c['id'] == selected_client_id), selected_client_id)
-        st.success(f"{_t('restricted_access')} : **{company_name}** (`{selected_client_id}`)")
-
 if selected_client_id:
     client = next((c for c in clients if c['id'] == selected_client_id), None)
     if client is None:
@@ -469,34 +539,6 @@ if selected_client_id:
         stop_app()
 
     client_tz = pytz.timezone(resolve_client_timezone(client))
-
-    # ====================== TABS PRINCIPAUX (conditionnels selon rôle) ======================
-    admin_tab_index = 0
-    if is_admin:
-        tab_list = [
-            _t("tab_global"),
-            _t("tab_config"),
-            _t("tab_calls"),
-            _t("tab_stats"),
-        ]
-        admin_tab_index = st.radio(
-            "admin_tab_nav",
-            options=list(range(len(tab_list))),
-            format_func=lambda i: tab_list[i],
-            horizontal=True,
-            label_visibility="collapsed",
-            key="admin_tab_index",
-        )
-    else:
-        tab_list = [
-            _t("tab_config"),
-            _t("tab_calls"),
-            _t("tab_stats"),
-        ]
-        tabs = st.tabs(tab_list)
-        tab_config = tabs[0]
-        tab_appels = tabs[1]
-        tab_stats = tabs[2]
 
     def render_global_dashboard() -> None:
             st.subheader(_t("global_dashboard"))
@@ -1318,22 +1360,14 @@ if selected_client_id:
         else:
             st.info(_t("no_stats_client"))
 
-    if is_admin:
-        if admin_tab_index == 0:
-            render_global_dashboard()
-        elif admin_tab_index == 1:
-            render_config_tab()
-        elif admin_tab_index == 2:
-            render_appels_tab()
-        elif admin_tab_index == 3:
-            render_stats_tab()
-    else:
-        with tab_config:
-            render_config_tab()
-        with tab_appels:
-            render_appels_tab()
-        with tab_stats:
-            render_stats_tab()
+    if nav_page == NAV_PAGE_GLOBAL:
+        render_global_dashboard()
+    elif nav_page == NAV_PAGE_CONFIG:
+        render_config_tab()
+    elif nav_page == NAV_PAGE_CALLS:
+        render_appels_tab()
+    elif nav_page == NAV_PAGE_STATS:
+        render_stats_tab()
 
 
 render_app_footer()

@@ -55,8 +55,35 @@ def inject_brand_css() -> None:
             }}
 
             [data-testid="stSidebar"] [data-testid="stMarkdown"] h3 {{
-                font-size: 0.95rem;
-                color: var(--telnek-text);
+                font-size: 0.82rem;
+                color: var(--telnek-muted);
+                font-weight: 600;
+                letter-spacing: 0.06em;
+                text-transform: uppercase;
+                margin-bottom: 0.35rem;
+            }}
+
+            [data-testid="stSidebar"] [role="radiogroup"] {{
+                gap: 0.2rem;
+            }}
+
+            [data-testid="stSidebar"] [role="radiogroup"] label {{
+                width: 100%;
+                padding: 0.5rem 0.65rem;
+                border-radius: 8px;
+                border: 1px solid transparent;
+                margin: 0;
+            }}
+
+            [data-testid="stSidebar"] [role="radiogroup"] label:hover {{
+                background: #F1F5F9;
+            }}
+
+            [data-testid="stSidebar"] [role="radiogroup"] label[data-checked="true"],
+            [data-testid="stSidebar"] [role="radiogroup"] label:has(input:checked) {{
+                background: #E8F2FA;
+                border-color: #C7DDF2;
+                font-weight: 600;
             }}
 
             div[data-testid="stForm"] {{
