@@ -45,15 +45,23 @@ APP_DIR = Path(__file__).resolve().parent
 LOGO_PATH = APP_DIR / "assets" / "telnek_logo.png"
 
 
+def render_brand_subtitle() -> None:
+    subtitle = _t("app_subtitle")
+    st.markdown(
+        f'<div class="telnek-brand-subtitle" '
+        f'style="font-size:4.75rem;font-weight:800;line-height:1.02;'
+        f'letter-spacing:-0.04em;margin:0;color:#1A1A2E;">'
+        f"{subtitle}</div>",
+        unsafe_allow_html=True,
+    )
+
+
 def render_app_header() -> None:
-    col_logo, col_title = st.columns([1, 5], vertical_alignment="center")
-    with col_logo:
+    brand_logo, brand_title = st.columns([0.85, 2.15], vertical_alignment="center")
+    with brand_logo:
         st.image(str(LOGO_PATH), width=200)
-    with col_title:
-        st.markdown(
-            f'<p class="telnek-subtitle">{_t("app_subtitle")}</p>',
-            unsafe_allow_html=True,
-        )
+    with brand_title:
+        render_brand_subtitle()
     st.markdown(
         '<div class="telnek-app-header-rule"></div>',
         unsafe_allow_html=True,
@@ -70,9 +78,13 @@ def render_login_page() -> None:
             key="ui_lang",
         )
 
-    _, center, _ = st.columns([1, 1.35, 1])
+    _, center, _ = st.columns([0.2, 3.4, 0.2])
     with center:
-        st.image(str(LOGO_PATH), width=220)
+        brand_logo, brand_title = st.columns([0.85, 2.15], vertical_alignment="center")
+        with brand_logo:
+            st.image(str(LOGO_PATH), width=200)
+        with brand_title:
+            render_brand_subtitle()
         st.markdown(
             f'<p class="telnek-login-title">{_t("login_required")}</p>',
             unsafe_allow_html=True,

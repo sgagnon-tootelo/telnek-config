@@ -15,4 +15,5 @@ def test_inject_brand_css_emits_brand_tokens(monkeypatch) -> None:
     assert BRAND_PRIMARY in css
     assert "telnek-footer" in css
     assert "telnek-login-title" in css
+    assert "telnek-brand-subtitle" in css
     assert '#MainMenu {visibility: hidden;}' in css

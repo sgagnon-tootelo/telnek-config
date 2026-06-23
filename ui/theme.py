@@ -72,18 +72,31 @@ def inject_brand_css() -> None:
                 margin: 0.25rem 0 0.75rem;
             }}
 
-            .telnek-subtitle {{
-                margin: 0;
-                color: var(--telnek-muted);
-                font-size: 1.05rem;
-                font-weight: 500;
+            [data-testid="stMarkdown"] .telnek-brand-subtitle,
+            .telnek-brand-subtitle {{
+                margin: 0 !important;
+                padding: 0 !important;
+                font-size: 4.75rem !important;
+                font-weight: 800 !important;
+                color: var(--telnek-text) !important;
+                line-height: 1.02 !important;
+                letter-spacing: -0.04em !important;
+                white-space: nowrap;
+            }}
+
+            @media (max-width: 900px) {{
+                [data-testid="stMarkdown"] .telnek-brand-subtitle,
+                .telnek-brand-subtitle {{
+                    font-size: 3.25rem !important;
+                    white-space: normal;
+                }}
             }}
 
             .telnek-login-title {{
-                margin: 0.25rem 0 0.35rem;
-                font-size: 1.35rem;
+                margin: 1.1rem 0 0.35rem;
+                font-size: 1.2rem;
                 font-weight: 600;
-                color: var(--telnek-text);
+                color: var(--telnek-primary);
                 text-align: center;
             }}
 
