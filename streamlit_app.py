@@ -1,3 +1,4 @@
+import base64
 import streamlit as st
 import json
 import pandas as pd
@@ -33,6 +34,12 @@ from i18n import (
     resolve_client_timezone,
     t,
     timezone_label,
+)
+from ui.components import (
+    app_header_html,
+    pie_chart_colors,
+    render_branded_plotly_chart,
+    render_kpi_group,
 )
 from ui.theme import inject_brand_css
 
@@ -88,25 +95,27 @@ def ensure_nav_page(is_admin: bool) -> None:
         st.session_state.main_nav_page = default_nav_page(is_admin)
 
 
-def render_brand_subtitle() -> None:
+def _logo_data_uri() -> str:
+    encoded = base64.standard_b64encode(LOGO_PATH.read_bytes()).decode("ascii")
+    return f"data:image/png;base64,{encoded}"
+
+
+def render_brand_subtitle(*, variant: str = "login") -> None:
     subtitle = _t("app_subtitle")
+    modifier = (
+        "telnek-brand-subtitle--login"
+        if variant == "login"
+        else "telnek-brand-subtitle--app"
+    )
     st.markdown(
-        f'<div class="telnek-brand-subtitle" '
-        f'style="font-size:4.75rem;font-weight:800;line-height:1.02;'
-        f'letter-spacing:-0.04em;margin:0;color:#1A1A2E;">'
-        f"{subtitle}</div>",
+        f'<div class="telnek-brand-subtitle {modifier}">{subtitle}</div>',
         unsafe_allow_html=True,
     )
 
 
 def render_app_header() -> None:
-    brand_logo, brand_title = st.columns([0.85, 2.15], vertical_alignment="center")
-    with brand_logo:
-        st.image(str(LOGO_PATH), width=200)
-    with brand_title:
-        render_brand_subtitle()
     st.markdown(
-        '<div class="telnek-app-header-rule"></div>',
+        app_header_html(subtitle=_t("app_subtitle"), logo_data_uri=_logo_data_uri()),
         unsafe_allow_html=True,
     )
 
@@ -127,7 +136,7 @@ def render_login_page() -> None:
         with brand_logo:
             st.image(str(LOGO_PATH), width=200)
         with brand_title:
-            render_brand_subtitle()
+            render_brand_subtitle(variant="login")
         st.markdown(
             f'<p class="telnek-login-title">{_t("login_required")}</p>',
             unsafe_allow_html=True,
@@ -216,6 +225,139 @@ def _add_latency_cost_display_columns(df: pd.DataFrame) -> pd.DataFrame:
     enriched[_t("col_estimated_cost")] = enriched["_estimated_cost_usd"].map(_format_usd)
     enriched[_t("col_pricing_mode")] = enriched["_pricing_mode"].fillna("—")
     return enriched
+
+
+def render_global_cumulative_kpis(
+    *,
+    total_appels: int,
+    completes: int,
+    rdv_reserves: int,
+    duree_moyenne: float,
+    appels_abandonnes: int,
+    rdv_confirmes: int,
+    rdv_annules: int,
+) -> None:
+    render_kpi_group(
+        _t("kpi_group_volume"),
+        [
+            (_t("metric_total"), total_appels, None),
+            (_t("metric_completed"), completes, None),
+            (_t("metric_abandoned"), appels_abandonnes, None),
+            (_t("metric_avg_duration"), f"{duree_moyenne} s", None),
+        ],
+    )
+    render_kpi_group(
+        _t("kpi_group_appointments"),
+        [
+            (_t("metric_appointments"), rdv_reserves, None),
+            (_t("metric_confirmed"), rdv_confirmes, None),
+            (_t("metric_cancelled"), rdv_annules, None),
+        ],
+    )
+
+
+def render_client_stats_kpis(
+    *,
+    total: int,
+    completes: int,
+    booked: int,
+    confirmed: int,
+    cancelled: int,
+    duree_moy: float,
+    pourcent_rdv: float,
+    appels_abandonnes: int,
+    taux_abandon: float,
+    taux_confirmation: float,
+    transferred: int,
+    transferred_success: int,
+    messages_pris: int,
+    metrics_summary: dict | None,
+    is_admin: bool,
+) -> None:
+    render_kpi_group(
+        _t("kpi_group_volume"),
+        [
+            (_t("metric_total"), total, None),
+            (_t("metric_completed"), completes, None),
+            (
+                _t("metric_abandoned"),
+                appels_abandonnes,
+                f"{taux_abandon:.1f}%",
+            ),
+            (_t("metric_avg_duration"), f"{duree_moy:.1f} s", None),
+        ],
+    )
+    render_kpi_group(
+        _t("kpi_group_appointments"),
+        [
+            (_t("metric_appointments"), booked, f"{pourcent_rdv:.1f}%"),
+            (_t("metric_confirmed_short"), confirmed, None),
+            (_t("metric_cancelled_short"), cancelled, None),
+            (_t("metric_confirm_rate"), f"{taux_confirmation:.1f}%", None),
+        ],
+    )
+    transfer_rate = (
+        (transferred_success / transferred * 100) if transferred > 0 else 0.0
+    )
+    render_kpi_group(
+        _t("kpi_group_operations"),
+        [
+            (_t("metric_transfers_tried"), transferred, None),
+            (
+                _t("metric_transfers_ok"),
+                transferred_success,
+                f"{transfer_rate:.1f}%",
+            ),
+            (_t("metric_messages"), messages_pris, None),
+            (
+                _t("metric_normal"),
+                total - transferred - messages_pris,
+                None,
+            ),
+        ],
+    )
+
+    if is_admin and metrics_summary is not None:
+        render_kpi_group(
+            _t("kpi_group_admin_latency"),
+            [
+                (
+                    _t("metric_avg_e2e_latency"),
+                    _format_seconds(metrics_summary["avg_e2e_latency_s"]),
+                    None,
+                ),
+                (
+                    _t("metric_avg_transcription_delay"),
+                    _format_seconds(metrics_summary["avg_transcription_delay_s"]),
+                    None,
+                ),
+                (
+                    _t("metric_calls_with_latency"),
+                    metrics_summary["calls_with_latency"],
+                    None,
+                ),
+            ],
+        )
+        render_kpi_group(
+            _t("kpi_group_admin_cost"),
+            [
+                (
+                    _t("metric_avg_call_cost"),
+                    _format_usd(metrics_summary["avg_cost_usd"]),
+                    None,
+                ),
+                (
+                    _t("metric_total_call_cost"),
+                    _format_usd(metrics_summary["total_cost_usd"]),
+                    None,
+                ),
+                (
+                    _t("metric_calls_with_cost"),
+                    metrics_summary["calls_with_cost"],
+                    None,
+                ),
+            ],
+        )
 
 
 def render_call_metrics_detail(row: pd.Series, *, is_admin: bool) -> None:
@@ -641,15 +783,15 @@ if selected_client_id:
                 rdv_confirmes = confirmed_resp.count or 0
                 rdv_annules = cancelled_resp.count or 0
 
-                # Métriques
-                col1, col2, col3, col4, col5, col6, col7 = st.columns(7)
-                with col1: st.metric(_t("metric_total"), total_appels)
-                with col2: st.metric(_t("metric_completed"), completes)
-                with col3: st.metric(_t("metric_appointments"), rdv_reserves)
-                with col4: st.metric(_t("metric_avg_duration"), f"{duree_moyenne} s")
-                with col5: st.metric(_t("metric_abandoned"), appels_abandonnes)
-                with col6: st.metric(_t("metric_confirmed"), rdv_confirmes)
-                with col7: st.metric(_t("metric_cancelled"), rdv_annules)
+                render_global_cumulative_kpis(
+                    total_appels=total_appels,
+                    completes=completes,
+                    rdv_reserves=rdv_reserves,
+                    duree_moyenne=duree_moyenne,
+                    appels_abandonnes=appels_abandonnes,
+                    rdv_confirmes=rdv_confirmes,
+                    rdv_annules=rdv_annules,
+                )
 
                 # Tableau récap par client + ligne TOTAL
                 df_stats_display = df_stats[['company_name', 'total_appels', 'appels_completes', 'rdv_reserves', 'duree_moyenne_sec']].copy()
@@ -1174,61 +1316,34 @@ if selected_client_id:
                 aggregate_call_metrics(df_detail) if is_admin else None
             )
 
-            # Métriques principales
-            col1, col2, col3, col4, col5, col6, col7, col8 = st.columns(8)
-            with col1: st.metric(_t("metric_total"), total)
-            with col2: st.metric(_t("metric_completed"), completes)
-            with col3: st.metric(_t("metric_appointments"), booked, delta=f"{pourcent_rdv:.1f}%")
-            with col4: st.metric(_t("metric_confirmed_short"), confirmed)
-            with col5: st.metric(_t("metric_cancelled_short"), cancelled)
-            with col6: st.metric(_t("metric_abandoned"), appels_abandonnes, delta=f"{taux_abandon:.1f}%")
-            with col7: st.metric(_t("metric_avg_duration"), f"{duree_moy:.1f} s")
-            with col8: st.metric(_t("metric_confirm_rate"), f"{taux_confirmation:.1f}%")
+            render_client_stats_kpis(
+                total=total,
+                completes=completes,
+                booked=booked,
+                confirmed=confirmed,
+                cancelled=cancelled,
+                duree_moy=duree_moy,
+                pourcent_rdv=pourcent_rdv,
+                appels_abandonnes=appels_abandonnes,
+                taux_abandon=taux_abandon,
+                taux_confirmation=taux_confirmation,
+                transferred=transferred,
+                transferred_success=transferred_success,
+                messages_pris=messages_pris,
+                metrics_summary=metrics_summary,
+                is_admin=is_admin,
+            )
 
-            st.divider()
-            colA, colB, colC, colD = st.columns(4)
-            with colA: st.metric(_t("metric_transfers_tried"), transferred)
-            with colB: st.metric(_t("metric_transfers_ok"), transferred_success, 
-                                delta=f"{(transferred_success / transferred * 100) if transferred > 0 else 0:.1f}%")
-            with colC: st.metric(_t("metric_messages"), messages_pris)
-            with colD: st.metric(_t("metric_normal"), total - transferred - messages_pris)
-
-            st.caption(_t("funnel", total=total, booked=booked, confirmed=confirmed, transferred=transferred, messages=messages_pris))
-
-            if is_admin and metrics_summary is not None:
-                st.divider()
-                st.subheader(_t("latency_section"))
-                col_m1, col_m2, col_m3, col_m4, col_m5, col_m6 = st.columns(6)
-                with col_m1:
-                    st.metric(
-                        _t("metric_avg_e2e_latency"),
-                        _format_seconds(metrics_summary["avg_e2e_latency_s"]),
-                    )
-                with col_m2:
-                    st.metric(
-                        _t("metric_avg_transcription_delay"),
-                        _format_seconds(metrics_summary["avg_transcription_delay_s"]),
-                    )
-                with col_m3:
-                    st.metric(
-                        _t("metric_calls_with_latency"),
-                        metrics_summary["calls_with_latency"],
-                    )
-                with col_m4:
-                    st.metric(
-                        _t("metric_avg_call_cost"),
-                        _format_usd(metrics_summary["avg_cost_usd"]),
-                    )
-                with col_m5:
-                    st.metric(
-                        _t("metric_total_call_cost"),
-                        _format_usd(metrics_summary["total_cost_usd"]),
-                    )
-                with col_m6:
-                    st.metric(
-                        _t("metric_calls_with_cost"),
-                        metrics_summary["calls_with_cost"],
-                    )
+            st.caption(
+                _t(
+                    "funnel",
+                    total=total,
+                    booked=booked,
+                    confirmed=confirmed,
+                    transferred=transferred,
+                    messages=messages_pris,
+                )
+            )
 
             st.divider()
             st.subheader(_t("charts"))
@@ -1241,10 +1356,14 @@ if selected_client_id:
                     "Type": [_t("chart_pie_normal"), _t("chart_pie_transfer"), _t("chart_pie_message")],
                     "Nombre": [total - transferred - messages_pris, transferred, messages_pris]
                 })
-                fig_pie = px.pie(repartition, values="Nombre", names="Type",
-                               title=_t("chart_pie_title"),
-                               color_discrete_sequence=px.colors.sequential.Blues)
-                st.plotly_chart(fig_pie, use_container_width=True)
+                fig_pie = px.pie(
+                    repartition,
+                    values="Nombre",
+                    names="Type",
+                    title=_t("chart_pie_title"),
+                    color_discrete_sequence=pie_chart_colors(3),
+                )
+                render_branded_plotly_chart(fig_pie)
 
             # Bar chart motifs – PROTECTION EN BÉTON (plus jamais d'erreur)
             with col_g2:
@@ -1258,8 +1377,9 @@ if selected_client_id:
                             y=reasons.values.tolist(),
                             labels={"x": _t("chart_bar_x"), "y": _t("chart_bar_y")},
                             title=_t("chart_bar_title"),
+                            color_discrete_sequence=pie_chart_colors(1),
                         )
-                        st.plotly_chart(fig_bar, use_container_width=True)
+                        render_branded_plotly_chart(fig_bar)
                     else:
                         st.info(_t("no_reasons"))
                 else:
@@ -1282,8 +1402,9 @@ if selected_client_id:
                             "_primary_latency_avg": _t("latency_primary"),
                         },
                         title=_t("chart_latency_title"),
+                        color_discrete_sequence=pie_chart_colors(1),
                     )
-                    st.plotly_chart(fig_latency, use_container_width=True)
+                    render_branded_plotly_chart(fig_latency)
 
             if (
                 is_admin
@@ -1302,8 +1423,9 @@ if selected_client_id:
                             "_estimated_cost_usd": _t("cost_total"),
                         },
                         title=_t("chart_cost_title"),
+                        color_discrete_sequence=pie_chart_colors(1),
                     )
-                    st.plotly_chart(fig_cost, use_container_width=True)
+                    render_branded_plotly_chart(fig_cost)
 
             st.divider()
             st.subheader(_t("detail_table"))
