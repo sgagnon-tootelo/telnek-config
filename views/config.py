@@ -17,6 +17,8 @@ from i18n import (
 )
 
 from app_context import AppContext
+from client_contacts_store import build_transfer_numbers, fetch_client_contacts
+from views.contacts_editor import render_contacts_editor
 
 
 def _safe_json_loads(data):
@@ -68,13 +70,17 @@ def _save_client_config(
 
     transfer_numbers_parsed: dict = {}
     if transfer_mode_selected != "none":
-        try:
-            transfer_numbers_parsed = (
-                json.loads(transfer_numbers_edited) if transfer_numbers_edited.strip() else {}
-            )
-        except json.JSONDecodeError:
-            st.error(t("transfer_json_invalid"))
-            ctx.stop_app()
+        db_contacts = fetch_client_contacts(ctx.supabase, ctx.selected_client_id)
+        if db_contacts:
+            transfer_numbers_parsed = build_transfer_numbers(db_contacts)
+        else:
+            try:
+                transfer_numbers_parsed = (
+                    json.loads(transfer_numbers_edited) if transfer_numbers_edited.strip() else {}
+                )
+            except json.JSONDecodeError:
+                st.error(t("transfer_json_invalid"))
+                ctx.stop_app()
     else:
         transfer_numbers_parsed = client.get("transfer_numbers", {}) or {}
 
@@ -317,20 +323,29 @@ def render_config_page(ctx: AppContext) -> None:
         )
         transfer_mode_selected = selected_mode["value"]
 
-        transfer_numbers_edited = "{}"
+        transfer_numbers_edited = _safe_json_dumps(client.get("transfer_numbers", {}))
         if transfer_mode_selected != "none":
-            transfer_numbers_edited = st.text_area(
-                t("transfer_numbers"),
-                value=_safe_json_dumps(client.get("transfer_numbers", {})),
-                height=150,
-            )
-            if st.button(t("validate_transfer_json"), key=f"validate_transfer_{client_id}"):
-                try:
-                    json.loads(transfer_numbers_edited)
-                    st.success(t("json_valid"))
-                    st.json(json.loads(transfer_numbers_edited))
-                except json.JSONDecodeError as e:
-                    st.error(t("json_invalid", error=e))
+            render_contacts_editor(ctx, transfer_mode=transfer_mode_selected)
+            if ctx.is_admin:
+                with st.expander(t("transfer_numbers_legacy"), expanded=False):
+                    st.caption(t("transfer_numbers_legacy_hint"))
+                    transfer_numbers_edited = st.text_area(
+                        t("transfer_numbers"),
+                        value=_safe_json_dumps(client.get("transfer_numbers", {})),
+                        height=150,
+                    )
+                    if st.button(t("validate_transfer_json"), key=f"validate_transfer_{client_id}"):
+                        try:
+                            json.loads(transfer_numbers_edited)
+                            st.success(t("json_valid"))
+                            st.json(json.loads(transfer_numbers_edited))
+                        except json.JSONDecodeError as e:
+                            st.error(t("json_invalid", error=e))
+            else:
+                contacts = fetch_client_contacts(ctx.supabase, client_id, include_inactive=False)
+                transfer_numbers_edited = _safe_json_dumps(build_transfer_numbers(contacts))
+        else:
+            transfer_numbers_edited = _safe_json_dumps(client.get("transfer_numbers", {}))
 
     with st.expander(t("config_section_options"), expanded=False):
         col1, col2 = st.columns(2)
