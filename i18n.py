@@ -39,7 +39,7 @@ _IANA_SET = {opt["iana"] for opt in TIMEZONE_OPTIONS}
 
 TRANSLATIONS: dict[str, dict[str, str]] = {
     "fr": {
-        "page_title": "Amélie - Telnek AI",
+        "page_title": "Telnek Réceptionniste IA",
         "app_subtitle": "Réceptionniste IA",
         "ui_language": "Langue de l'interface",
         "login_required": "Connexion",
@@ -277,7 +277,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "copyright_footer": "Copyright © 2026 Telnek - Tous droits réservés.",
     },
     "en": {
-        "page_title": "Emily - Telnek AI",
+        "page_title": "Telnek AI Receptionist",
         "app_subtitle": "AI Receptionist",
         "ui_language": "Interface language",
         "login_required": "Sign in",
