@@ -35,6 +35,16 @@ from i18n import (
     t,
     timezone_label,
 )
+from ui.calls_table import (
+    build_calls_display_dataframe,
+    prepare_calls_table_dataframe,
+    filter_calls_dataframe,
+    render_call_detail_panel,
+    render_calls_dataframe,
+    render_calls_filters,
+    sort_calls_dataframe,
+    strip_internal_call_columns,
+)
 from ui.components import (
     app_header_html,
     pie_chart_colors,
@@ -358,6 +368,37 @@ def render_client_stats_kpis(
                 ),
             ],
         )
+
+
+def _render_call_recording(row: pd.Series) -> None:
+    st.subheader(_t("recording"))
+    recording_url = row.get("recording_url")
+    if recording_url and isinstance(recording_url, str) and recording_url.startswith("http"):
+        try:
+            account_sid = st.secrets["TWILIO_ACCOUNT_SID"]
+            auth_token = st.secrets["TWILIO_AUTH_TOKEN"]
+            response = requests.get(
+                recording_url, auth=(account_sid, auth_token), timeout=15
+            )
+            if response.status_code == 200:
+                audio_bytes = response.content
+                st.success(_t("recording_ok"))
+                st.audio(audio_bytes, format="audio/wav")
+                st.download_button(
+                    label=_t("download_wav"),
+                    data=audio_bytes,
+                    file_name=(
+                        f"appel_{row.get('caller_number', 'inconnu')}_"
+                        f"{row.get('call_date', '')}.wav"
+                    ),
+                    mime="audio/wav",
+                )
+            else:
+                st.error(_t("recording_denied", code=response.status_code))
+        except Exception as e:
+            st.error(_t("recording_error", error=str(e)))
+    else:
+        st.info(_t("no_recording"))
 
 
 def render_call_metrics_detail(row: pd.Series, *, is_admin: bool) -> None:
@@ -1108,7 +1149,6 @@ if selected_client_id:
 
 
     def render_appels_tab() -> None:
-        # ====================== TAB HISTORIQUE DES APPELS + ÉCOUTE WAV (MIS À JOUR) ======================
         st.subheader(_t("calls_history", client_id=selected_client_id))
 
         appels_response = supabase.table('vw_appels_clients') \
@@ -1122,147 +1162,54 @@ if selected_client_id:
             df = pd.DataFrame(appels_response.data)
             if is_admin:
                 df = _add_latency_cost_display_columns(df)
+            df = prepare_calls_table_dataframe(df, t_fn=_t, client_tz=client_tz)
 
-            for col in ['started_at', 'appointment_start']:
-                if col in df.columns:
-                    df[col] = pd.to_datetime(df[col], errors='coerce')
-                    mask = df[col].notna()
-                    if mask.any():
-                        if df.loc[mask, col].dt.tz is None:
-                            df.loc[mask, col] = df.loc[mask, col].dt.tz_localize('UTC')
-                        df.loc[mask, col] = df.loc[mask, col].dt.tz_convert(client_tz)
-
-            # ====================== NOUVELLE COLONNE "ISSUE / ACTION" ======================
-            def get_issue_label(row):
-                if row.get('appointment_booked'):
-                    return _t("issue_appointment")
-                elif row.get('message_taken'):
-                    return _t("issue_message")
-                elif row.get('transfer_success'):
-                    return _t("issue_transfer")
-                elif row.get('status') == 'abandoned':
-                    return _t("issue_abandoned")
-                else:
-                    return _t("issue_done")
-
-            df[_t("result_action")] = df.apply(get_issue_label, axis=1)
-
-            def get_detail(row):
-                if row.get('message_taken'):
-                    reason = str(row.get('message_reason') or "")
-                    return reason[:70] + "..." if len(reason) > 70 else reason
-                elif row.get('transfer_success'):
-                    dept = str(row.get('transfer_department') or "")
-                    number = str(row.get('transfer_to_number') or "")
-                    if dept and number:
-                        return f"{dept} ({number})"
-                    return dept or number
-                else:
-                    return "—"
-
-            df[_t("detail")] = df.apply(get_detail, axis=1)
-
-            def color_issue(val):
-                val_str = str(val)
-                if "📅" in val_str:
-                    return 'background-color: #d4edda; color: #155724; font-weight: bold'
-                elif "📩" in val_str:
-                    return 'background-color: #cce5ff; color: #004085; font-weight: bold'
-                elif "🔄" in val_str:
-                    return 'background-color: #fff3cd; color: #856404; font-weight: bold'
-                elif "❌" in val_str:
-                    return 'background-color: #f8d7da; color: #721c24; font-weight: bold'
-                else:
-                    return 'background-color: #e2e3e5; color: #383d41'
-
-            # Aperçu transcription + indicateur audio
-            df['transcript_preview'] = df['transcript'].fillna('').astype(str).apply(
-                lambda x: (x[:85] + '...') if len(x) > 85 else x
+            period, status_filter, issue_filter = render_calls_filters(
+                t_fn=_t,
+                key_prefix=f"calls_{selected_client_id}",
             )
-            df['🎧'] = df.apply(
-                lambda row: '✅' if any(pd.notna(row.get(col)) for col in ['recording_url', 'audio_url', 'wav_url', 'recording']) else '',
-                axis=1
+            df = filter_calls_dataframe(
+                df,
+                period_days=period,
+                status_filter=status_filter,
+                issue_filter=issue_filter,
             )
-
-            # Colonnes du tableau
-            display_columns = [
-                'call_date', 'call_time', 'caller_number',
-                '🎧', 'status_label', _t("result_action"), _t("detail"),
-                'appointment_start', 'appointment_name', 'duration_formatted',
-            ]
-            if is_admin:
-                display_columns.extend(latency_cost_column_keys())
-            display_columns.append('transcript_preview')
-            available_cols = [col for col in display_columns if col in df.columns]
-
-            def highlight_rdv(row):
-                if row.get('appointment_booked'):
-                    return ['background-color: #d4edda'] * len(row)
-                return [''] * len(row)
-
-            styled_df = df[available_cols].style.apply(highlight_rdv, axis=1)
-            styled_df = styled_df.map(color_issue, subset=[_t("result_action")])
 
             st.caption(_t("calls_click_hint"))
-            event = st.dataframe(
-                styled_df,
-                use_container_width=True,
-                hide_index=True,
-                on_select="rerun",
-                selection_mode="single-row",
-                key=f"call_table_{selected_client_id}"
+            df_display = build_calls_display_dataframe(
+                df,
+                t_fn=_t,
+                is_admin=is_admin,
+                latency_column_keys=latency_cost_column_keys(),
+                include_transcript_preview=True,
+            )
+            event = render_calls_dataframe(
+                df_display,
+                t_fn=_t,
+                selection_key=f"call_table_{selected_client_id}",
             )
 
-            # Téléchargement CSV
-            csv_df = _strip_latency_cost_raw_columns(df) if not is_admin else df
+            csv_df = strip_internal_call_columns(df)
+            csv_df = _strip_latency_cost_raw_columns(csv_df) if not is_admin else csv_df
             csv = csv_df.to_csv(index=False).encode('utf-8')
-            st.download_button(_t("download_csv"), csv, 
-                             f"appels_{selected_client_id}.csv", "text/csv")
+            st.download_button(
+                _t("download_csv"),
+                csv,
+                f"appels_{selected_client_id}.csv",
+                "text/csv",
+            )
 
-            # ====================== DÉTAIL SÉLECTIONNÉ ======================
-            if event.selection.rows:
+            if event is not None and event.selection.rows:
                 row = df.iloc[event.selection.rows[0]]
-
-                st.divider()
-                st.subheader(_t("call_detail", date=row.get('call_date'), time=row.get('call_time'), caller=row.get('caller_number')))
-
-                st.markdown(f"**{_t('appointment_status')} :** {row.get('statut_rdv', '—')}")
-
-                render_call_metrics_detail(row, is_admin=is_admin)
-
-                st.subheader(_t("recording"))
-                recording_url = row.get('recording_url')
-                if recording_url and isinstance(recording_url, str) and recording_url.startswith('http'):
-                    try:
-                        account_sid = st.secrets["TWILIO_ACCOUNT_SID"]
-                        auth_token = st.secrets["TWILIO_AUTH_TOKEN"]
-                        response = requests.get(recording_url, auth=(account_sid, auth_token), timeout=15)
-                        if response.status_code == 200:
-                            audio_bytes = response.content
-                            st.success(_t("recording_ok"))
-                            st.audio(audio_bytes, format="audio/wav")
-                            st.download_button(
-                                label=_t("download_wav"),
-                                data=audio_bytes,
-                                file_name=f"appel_{row.get('caller_number','inconnu')}_{row.get('call_date','')}.wav",
-                                mime="audio/wav"
-                            )
-                        else:
-                            st.error(_t("recording_denied", code=response.status_code))
-                    except Exception as e:
-                        st.error(_t("recording_error", error=str(e)))
-                else:
-                    st.info(_t("no_recording"))
-
-                st.subheader(_t("transcript_full"))
-                transcript = row.get('transcript', '')
-                if transcript and str(transcript).strip():
-                    st.text_area(_t("transcript_full"), transcript, height=380)
-                else:
-                    st.info(_t("no_transcript"))
-            else:
+                render_call_detail_panel(
+                    row,
+                    t_fn=_t,
+                    is_admin=is_admin,
+                    render_metrics=render_call_metrics_detail,
+                    render_recording=_render_call_recording,
+                )
+            elif not df_display.empty:
                 st.info(_t("select_row"))
-
         else:
             st.info(_t("no_calls_yet"))
 
@@ -1430,50 +1377,52 @@ if selected_client_id:
             st.divider()
             st.subheader(_t("detail_table"))
 
-            sort_option = st.selectbox(
-                _t("sort_calls"),
-                options=[_t("sort_newest"), _t("sort_oldest")],
-                index=0,
-                key=f"stats_sort_{selected_client_id}"
+            df_detail_enriched = prepare_calls_table_dataframe(
+                df_detail.copy(),
+                t_fn=_t,
+                client_tz=client_tz,
+            )
+            period, status_filter, issue_filter = render_calls_filters(
+                t_fn=_t,
+                key_prefix=f"stats_{selected_client_id}",
+            )
+            df_detail_enriched = filter_calls_dataframe(
+                df_detail_enriched,
+                period_days=period,
+                status_filter=status_filter,
+                issue_filter=issue_filter,
             )
 
-            # Tri du dataframe (on travaille sur une copie pour ne pas affecter les calculs précédents)
-            df_sorted = df_detail.copy()
-
-            if not df_sorted.empty and 'started_at' in df_sorted.columns:
-                df_sorted['started_at'] = pd.to_datetime(df_sorted['started_at'], errors='coerce')
-                ascending = sort_option == _t("sort_oldest")
-                df_sorted = df_sorted.sort_values(by='started_at', ascending=ascending).reset_index(drop=True)
-            elif not df_sorted.empty:
-                # Fallback si started_at n'existe pas
-                df_sorted = df_sorted.sort_values(by=['call_date', 'call_time'], ascending=False)
-
-            # Préparation du tableau d'affichage
-            detail_columns = [
-                'call_date', 'call_time', 'caller_number', 'status',
-                'transfer_attempted', 'transfer_success', 'message_taken',
-                'appointment_booked', 'appointment_confirmed', 'appointment_cancelled',
-                'appointment_reason',
-            ]
-            if is_admin:
-                detail_columns.extend(latency_cost_column_keys())
-            available_detail_cols = [c for c in detail_columns if c in df_sorted.columns]
-            df_display = df_sorted[available_detail_cols].copy()
-            def color_row(row):
-                if row.get('appointment_confirmed', False):
-                    return ['background-color: #d4edda'] * len(row)
-                elif row.get('appointment_cancelled', False):
-                    return ['background-color: #f8d7da'] * len(row)
-                elif row.get('transfer_success', False) is True:
-                    return ['background-color: #fff3cd'] * len(row)
-                return [''] * len(row)
-
-            styled = df_display.style.apply(color_row, axis=1)
-            st.dataframe(styled, use_container_width=True, hide_index=True)
+            sort_col, _ = st.columns([1, 3])
+            with sort_col:
+                sort_option = st.selectbox(
+                    _t("sort_calls"),
+                    options=[_t("sort_newest"), _t("sort_oldest")],
+                    index=0,
+                    key=f"stats_sort_{selected_client_id}",
+                )
+            df_sorted = sort_calls_dataframe(
+                df_detail_enriched,
+                newest_first=sort_option == _t("sort_newest"),
+            )
+            df_display = build_calls_display_dataframe(
+                df_sorted,
+                t_fn=_t,
+                is_admin=is_admin,
+                latency_column_keys=latency_cost_column_keys(),
+                include_transcript_preview=False,
+            )
+            render_calls_dataframe(
+                df_display,
+                t_fn=_t,
+                selection_key=f"stats_table_{selected_client_id}",
+                enable_selection=False,
+            )
 
             # Export CSV
+            csv_df = strip_internal_call_columns(df_sorted)
             csv_df = (
-                _strip_latency_cost_raw_columns(df_detail) if not is_admin else df_detail
+                _strip_latency_cost_raw_columns(csv_df) if not is_admin else csv_df
             )
             csv = csv_df.to_csv(index=False).encode('utf-8')
             st.download_button(_t("download_all_csv"), csv, 

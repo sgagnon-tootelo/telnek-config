@@ -226,6 +226,12 @@ def inject_brand_css() -> None:
                 line-height: 1.45;
             }}
 
+            [data-testid="stDataFrame"] {{
+                border: 1px solid #E2E8F0;
+                border-radius: 10px;
+                overflow: hidden;
+            }}
+
             .telnek-footer {{
                 text-align: center;
                 color: var(--telnek-muted);
