@@ -1,9 +1,9 @@
 import pandas as pd
 
-from streamlit_app import (
+from ui.metrics_display import (
     LATENCY_COST_RAW_COLUMNS,
     latency_cost_column_keys,
-    _strip_latency_cost_raw_columns,
+    strip_latency_cost_raw_columns,
 )
 
 
@@ -28,7 +28,7 @@ def test_strip_latency_cost_raw_columns_removes_sensitive_fields() -> None:
             }
         ]
     )
-    stripped = _strip_latency_cost_raw_columns(df)
+    stripped = strip_latency_cost_raw_columns(df)
     assert list(stripped.columns) == ["caller_number"]
     for col in LATENCY_COST_RAW_COLUMNS:
         assert col not in stripped.columns

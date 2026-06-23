@@ -226,6 +226,20 @@ def inject_brand_css() -> None:
                 line-height: 1.45;
             }}
 
+            .telnek-config-save-bar {{
+                position: sticky;
+                bottom: 0;
+                z-index: 20;
+                background: var(--telnek-bg);
+                border-top: 1px solid #E2E8F0;
+                padding: 0.85rem 0 0.35rem;
+                margin-top: 1rem;
+            }}
+
+            .block-container:has(.telnek-config-save-bar) {{
+                padding-bottom: 2.5rem;
+            }}
+
             [data-testid="stDataFrame"] {{
                 border: 1px solid #E2E8F0;
                 border-radius: 10px;

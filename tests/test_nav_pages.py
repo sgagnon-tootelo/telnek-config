@@ -1,4 +1,4 @@
-from streamlit_app import (
+from ui.nav import (
     ADMIN_NAV_PAGES,
     CLIENT_NAV_PAGES,
     NAV_PAGE_GLOBAL,
