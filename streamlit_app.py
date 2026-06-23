@@ -34,6 +34,7 @@ from i18n import (
     t,
     timezone_label,
 )
+from ui.theme import inject_brand_css
 
 
 def _t(key: str, **kwargs) -> str:
@@ -47,16 +48,69 @@ LOGO_PATH = APP_DIR / "assets" / "telnek_logo.png"
 def render_app_header() -> None:
     col_logo, col_title = st.columns([1, 5], vertical_alignment="center")
     with col_logo:
-        st.image(str(LOGO_PATH), width=240)
+        st.image(str(LOGO_PATH), width=200)
     with col_title:
-        st.markdown(f"## {_t('app_subtitle')}")
+        st.markdown(
+            f'<p class="telnek-subtitle">{_t("app_subtitle")}</p>',
+            unsafe_allow_html=True,
+        )
+    st.markdown(
+        '<div class="telnek-app-header-rule"></div>',
+        unsafe_allow_html=True,
+    )
+
+
+def render_login_page() -> None:
+    top_left, top_right = st.columns([3, 1])
+    with top_right:
+        st.selectbox(
+            _t("ui_language"),
+            options=["fr", "en"],
+            format_func=lambda x: "Français" if x == "fr" else "English",
+            key="ui_lang",
+        )
+
+    _, center, _ = st.columns([1, 1.35, 1])
+    with center:
+        st.image(str(LOGO_PATH), width=220)
+        st.markdown(
+            f'<p class="telnek-login-title">{_t("login_required")}</p>',
+            unsafe_allow_html=True,
+        )
+        st.markdown(
+            f'<span class="telnek-login-caption">{_t("login_caption")}</span>',
+            unsafe_allow_html=True,
+        )
+
+        with st.form(key="login_form", clear_on_submit=False):
+            email = st.text_input(
+                _t("email"),
+                value="",
+                placeholder=_t("login_email_placeholder"),
+            )
+            password = st.text_input(
+                _t("password"),
+                type="password",
+                placeholder="••••••••",
+            )
+            submitted = st.form_submit_button(
+                _t("login_btn"),
+                type="primary",
+                use_container_width=True,
+            )
+            if submitted:
+                login_user(email, password)
+
+        st.markdown(
+            f'<p class="telnek-login-hint">{_t("login_info")}</p>',
+            unsafe_allow_html=True,
+        )
 
 
 def render_app_footer() -> None:
     st.divider()
     st.markdown(
-        f'<p style="text-align:center;color:#888;font-size:0.85rem;margin:1rem 0;">'
-        f'{_t("copyright_footer")}</p>',
+        f'<p class="telnek-footer">{_t("copyright_footer")}</p>',
         unsafe_allow_html=True,
     )
 
@@ -302,7 +356,7 @@ def update_client(client_id, data):
 
 # ==================== INTERFACE ====================
 st.set_page_config(page_title=_t("page_title"), page_icon=str(LOGO_PATH), layout="wide")
-render_app_header()
+inject_brand_css()
 
 # ==================== GATE D'AUTHENTIFICATION ====================
 if not st.session_state.get("authenticated", False):
@@ -338,33 +392,10 @@ if not st.session_state.get("authenticated", False):
 
         st.rerun()
 
-    lang_col, _ = st.columns([1, 3])
-    with lang_col:
-        st.selectbox(
-            _t("ui_language"),
-            options=["fr", "en"],
-            format_func=lambda x: "Français" if x == "fr" else "English",
-            key="ui_lang",
-        )
-
-    st.subheader(_t("login_required"))
-    st.caption(_t("login_caption"))
-
-    with st.form(key="login_form", clear_on_submit=False):
-        col1, col2 = st.columns([2, 1])
-        with col1:
-            default_email = "sylvaing@videotron.ca"
-            email = st.text_input(_t("email"), value=default_email, placeholder="votre@email.com")
-        with col2:
-            password = st.text_input(_t("password"), type="password", placeholder="••••••••")
-
-        submitted = st.form_submit_button(_t("login_btn"), type="primary", use_container_width=True)
-
-        if submitted:
-            login_user(email, password)
-
-    st.info(_t("login_info"))
+    render_login_page()
     stop_app()
+
+render_app_header()
 
 # ==================== SIDEBAR UTILISATEUR + DÉCONNEXION ====================
 with st.sidebar:
