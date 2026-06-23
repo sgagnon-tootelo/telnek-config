@@ -42,9 +42,23 @@ def apply_brand_plotly(fig, *, color_count: int | None = None):
     return fig
 
 
-def inject_brand_css() -> None:
+def inject_brand_css(*, hide_sidebar: bool = False) -> None:
     """Inject global CSS for a cleaner, Telnek-branded Streamlit shell."""
     import streamlit as st
+
+    login_sidebar_css = ""
+    if hide_sidebar:
+        login_sidebar_css = """
+            section[data-testid="stSidebar"] {
+                display: none !important;
+            }
+            [data-testid="collapsedControl"] {
+                display: none !important;
+            }
+            section[data-testid="stMain"] {
+                margin-left: 0 !important;
+            }
+        """
 
     st.markdown(
         f"""
@@ -63,6 +77,14 @@ def inject_brand_css() -> None:
             header[data-testid="stHeader"] {{
                 background: transparent;
             }}
+
+            [data-testid="stSidebarNav"],
+            [data-testid="stSidebarNavItems"],
+            [data-testid="stSidebarNavLink"],
+            [data-testid="stSidebarNavSeparator"] {{
+                display: none !important;
+            }}
+            {login_sidebar_css}
 
             .block-container {{
                 padding-top: 1.5rem;

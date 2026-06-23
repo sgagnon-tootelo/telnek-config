@@ -234,8 +234,12 @@ def update_client(client_id: str, data: dict):
     return supabase.table("clients").update(data).eq("id", client_id).execute()
 
 
-st.set_page_config(page_title=_t("page_title"), page_icon=str(LOGO_PATH), layout="wide")
-inject_brand_css()
+st.set_page_config(
+    page_title=_t("page_title"),
+    page_icon=str(LOGO_PATH),
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
 
 if not st.session_state.get("authenticated", False):
     if st.secrets.get("DEV_BYPASS_AUTH", False):
@@ -259,9 +263,11 @@ if not st.session_state.get("authenticated", False):
             st.info(_t("dev_client", client_id=bypass_client_id))
         st.rerun()
 
+    inject_brand_css(hide_sidebar=True)
     render_login_page()
     stop_app()
 
+inject_brand_css(hide_sidebar=False)
 render_app_header()
 
 clients = get_clients()
