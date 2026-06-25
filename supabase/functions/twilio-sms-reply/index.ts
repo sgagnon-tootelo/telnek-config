@@ -52,8 +52,8 @@ serve(async (req) => {
       .select(`id, google_event_id, appointment_name, appointment_number, caller_number`)
       .or(`appointment_number.ilike.%${cleanNumber}%,caller_number.ilike.%${cleanNumber}%`)
       .eq('appointment_booked', true)
-      .is('appointment_confirmed', false)
-      .is('appointment_cancelled', false)
+      .or('appointment_confirmed.is.null,appointment_confirmed.eq.false')
+      .or('appointment_cancelled.is.null,appointment_cancelled.eq.false')
       .limit(1)
 
     const rdv = results?.[0]
