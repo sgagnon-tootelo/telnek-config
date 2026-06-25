@@ -37,6 +37,7 @@ def _t(key: str, **kwargs) -> str:
         "detail": "Détail",
         "col_appointment_start": "RDV prévu",
         "col_appointment_name": "Nom RDV",
+        "col_appointment_status": "Conf. RDV",
         "col_duration": "Durée",
         "col_transcript_preview": "Transcription (aperçu)",
         "audio_available": "Oui",
@@ -121,12 +122,37 @@ def test_build_calls_display_dataframe_uses_translated_headers() -> None:
         "Audio",
         "Statut",
         "Résultat",
+        "Conf. RDV",
         "Détail",
         "Durée",
         "Transcription (aperçu)",
     ]
     assert display.iloc[0]["Résultat"] == "Terminé"
     assert display.iloc[0]["Statut"] == "● Terminé"
+
+
+def test_build_calls_display_shows_appointment_confirmation_status() -> None:
+    enriched = prepare_calls_table_dataframe(
+        pd.DataFrame(
+            [
+                {
+                    "call_date": "2026-06-25",
+                    "call_time": "16:40",
+                    "caller_number": "+15149474976",
+                    "status": "completed",
+                    "appointment_booked": True,
+                    "message_taken": False,
+                    "transfer_success": False,
+                    "statut_rdv": "✅ Confirmé",
+                    "duration_formatted": "3m 00s",
+                }
+            ]
+        ),
+        t_fn=_t,
+    )
+    display = build_calls_display_dataframe(enriched, t_fn=_t, is_admin=False, latency_column_keys=[])
+    assert display.iloc[0]["Statut"] == "● Terminé"
+    assert display.iloc[0]["Conf. RDV"] == "✅ Confirmé"
 
 
 def test_sort_calls_dataframe_newest_first() -> None:

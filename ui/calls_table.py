@@ -216,6 +216,7 @@ def build_calls_display_dataframe(
         ("_audio_label", t_fn("col_audio")),
         ("_status_badge", t_fn("col_status")),
         ("_issue_badge", t_fn("result_action")),
+        ("statut_rdv", t_fn("col_appointment_status")),
         ("_detail", t_fn("detail")),
         ("appointment_start", t_fn("col_appointment_start")),
         ("appointment_name", t_fn("col_appointment_name")),
@@ -234,6 +235,9 @@ def build_calls_display_dataframe(
             data[label] = df[source]
 
     display = pd.DataFrame(data)
+    appt_status_col = t_fn("col_appointment_status")
+    if appt_status_col in display.columns:
+        display[appt_status_col] = display[appt_status_col].fillna("—")
     if "appointment_start" in df.columns:
         appt_col = t_fn("col_appointment_start")
         if appt_col in display.columns:
@@ -257,6 +261,7 @@ def calls_table_column_config(
         t_fn("col_audio"): 60,
         t_fn("col_status"): 120,
         t_fn("result_action"): 100,
+        t_fn("col_appointment_status"): 120,
         t_fn("detail"): 220,
         t_fn("col_appointment_start"): 140,
         t_fn("col_appointment_name"): 140,
