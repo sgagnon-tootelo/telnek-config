@@ -14,7 +14,6 @@ from i18n import resolve_client_timezone, t
 from views.calls import render_calls_page
 from views.config import render_config_page
 from views.dashboard import render_dashboard_page
-from views.account import render_account_page
 from views.stats import render_stats_page
 from ui.components import app_header_html
 from ui.metrics_display import (
@@ -44,14 +43,7 @@ _LEGACY_SIDEBAR_KEYS = (
     "telnek_ui_lang",
     "telnek_ui_lang_radio",
     "telnek_ui_lang_radio_login",
-    "telnek_btn_change_password",
-    "telnek_btn_password_reset",
 )
-
-
-def _ui_lang_index(session_state) -> int:
-    lang = session_state.get("ui_lang", "fr")
-    return 0 if lang != "en" else 1
 
 
 def _purge_legacy_sidebar_keys(session_state) -> None:
@@ -102,16 +94,12 @@ def render_login_page() -> None:
     _ensure_ui_lang(st.session_state)
     top_left, top_right = st.columns([3, 1])
     with top_right:
-        chosen = st.radio(
+        st.selectbox(
             _t("ui_language"),
             options=["fr", "en"],
-            index=_ui_lang_index(st.session_state),
             format_func=lambda x: "Français" if x == "fr" else "English",
-            horizontal=True,
             key="ui_lang",
-            label_visibility="collapsed",
         )
-        st.session_state.ui_lang = chosen
 
     _, center, _ = st.columns([0.2, 3.4, 0.2])
     with center:
@@ -361,15 +349,12 @@ with st.sidebar:
             st.caption(f"`{selected_client_id}`")
 
     st.divider()
-    chosen_lang = st.radio(
+    st.selectbox(
         _t("ui_language"),
         options=["fr", "en"],
-        index=_ui_lang_index(st.session_state),
         format_func=lambda x: "Français" if x == "fr" else "English",
-        horizontal=True,
         key="ui_lang",
     )
-    st.session_state.ui_lang = chosen_lang
     st.divider()
     st.markdown(f"### {_t('session')}")
     st.markdown(f"**{st.session_state.get('user_email', '—')}**")
@@ -412,7 +397,5 @@ if selected_client_id:
         from views.users import render_users_page
 
         render_users_page(ctx)
-    elif nav_page == "account":
-        render_account_page(ctx)
 
 render_app_footer()

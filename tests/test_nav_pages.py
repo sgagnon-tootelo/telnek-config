@@ -1,7 +1,6 @@
 from ui.nav import (
     ADMIN_NAV_PAGES,
     CLIENT_NAV_PAGES,
-    NAV_PAGE_ACCOUNT,
     NAV_PAGE_GLOBAL,
     NAV_PAGE_USERS,
     default_nav_page,
@@ -34,8 +33,3 @@ def test_default_nav_page_by_role() -> None:
 
 def test_nav_page_label_uses_translation_keys() -> None:
     assert nav_page_label(NAV_PAGE_GLOBAL, lambda key: key) == "tab_global"
-
-
-def test_account_page_in_nav_for_all_roles() -> None:
-    assert NAV_PAGE_ACCOUNT in nav_pages_for_role(True)
-    assert NAV_PAGE_ACCOUNT in nav_pages_for_role(False)
