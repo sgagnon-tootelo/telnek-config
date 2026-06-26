@@ -689,15 +689,10 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
 }
 
 
-VALID_UI_LANGS = ("fr", "en")
-
-
 def normalize_ui_lang(session_state) -> str:
-    lang = session_state.get("ui_lang", "fr")
-    if lang not in VALID_UI_LANGS:
-        session_state.ui_lang = "fr"
-        return "fr"
-    return lang
+    from ui.sidebar_state import prepare_ui_lang
+
+    return prepare_ui_lang(session_state)
 
 
 def get_ui_lang(session_state) -> str:

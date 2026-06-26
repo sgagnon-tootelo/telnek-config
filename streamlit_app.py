@@ -10,7 +10,7 @@ import streamlit as st
 from supabase import Client, create_client
 
 from app_context import AppContext
-from i18n import normalize_ui_lang, resolve_client_timezone, t
+from i18n import resolve_client_timezone, t
 from views.calls import render_calls_page
 from views.config import render_config_page
 from views.dashboard import render_dashboard_page
@@ -34,7 +34,12 @@ from ui.nav import (
     nav_pages_for_role,
 )
 from ui.session_panel import render_password_change_form
-from ui.sidebar_state import normalize_client_selector
+from ui.sidebar_state import (
+    CLIENT_SELECTOR_KEY,
+    UI_LANG_KEY,
+    prepare_client_selector,
+    prepare_ui_lang,
+)
 from ui.theme import inject_brand_css
 
 
@@ -72,14 +77,14 @@ def render_app_header() -> None:
 
 
 def render_login_page() -> None:
-    normalize_ui_lang(st.session_state)
+    prepare_ui_lang(st.session_state)
     top_left, top_right = st.columns([3, 1])
     with top_right:
         st.selectbox(
             _t("ui_language"),
             options=["fr", "en"],
             format_func=lambda x: "Français" if x == "fr" else "English",
-            key="ui_lang",
+            key=UI_LANG_KEY,
         )
 
     _, center, _ = st.columns([0.2, 3.4, 0.2])
@@ -143,10 +148,7 @@ def init_supabase() -> Client:
 
 supabase: Client = init_supabase()
 
-if "ui_lang" not in st.session_state:
-    st.session_state.ui_lang = "fr"
-else:
-    normalize_ui_lang(st.session_state)
+prepare_ui_lang(st.session_state)
 if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
     st.session_state.user_email = None
@@ -216,8 +218,11 @@ def logout_user() -> None:
         "user_role",
         "user_client_id",
         "profile",
-        "main_client_selector",
         "main_nav_page",
+        CLIENT_SELECTOR_KEY,
+        UI_LANG_KEY,
+        "main_client_selector",
+        "ui_lang",
         "admin_tab_index",
     ):
         if key in st.session_state:
@@ -283,7 +288,12 @@ if not clients:
 is_admin = st.session_state.get("user_role") == "admin"
 clients_sorted = sorted(clients, key=lambda c: c.get("id", "").lower())
 client_ids = [c["id"] for c in clients_sorted if c.get("id")]
+client_labels = {
+    c["id"]: c.get("company_name") or c["id"] for c in clients_sorted if c.get("id")
+}
 ensure_nav_page(is_admin, st.session_state)
+prepare_client_selector(st.session_state, client_ids)
+prepare_ui_lang(st.session_state)
 
 with st.sidebar:
     st.markdown(f"### {_t('nav_section')}")
@@ -300,13 +310,19 @@ with st.sidebar:
     st.markdown(f"### {_t('client_section')}")
 
     if is_admin:
-        normalize_client_selector(st.session_state, client_ids)
-        selected_client_id = st.selectbox(
-            _t("select_client"),
-            options=client_ids,
-            key="main_client_selector",
-            label_visibility="collapsed",
-        )
+        if not client_ids:
+            st.caption(_t("no_clients"))
+            selected_client_id = None
+        else:
+            selected_client_id = st.selectbox(
+                _t("select_client"),
+                options=client_ids,
+                format_func=lambda client_id: (
+                    f"{client_labels.get(client_id, client_id)} ({client_id})"
+                ),
+                key=CLIENT_SELECTOR_KEY,
+                label_visibility="collapsed",
+            )
     else:
         selected_client_id = client_ids[0] if client_ids else None
         if selected_client_id:
@@ -322,12 +338,12 @@ with st.sidebar:
             st.caption(f"`{selected_client_id}`")
 
     st.divider()
-    normalize_ui_lang(st.session_state)
+    prepare_ui_lang(st.session_state)
     st.selectbox(
         _t("ui_language"),
         options=["fr", "en"],
         format_func=lambda x: "Français" if x == "fr" else "English",
-        key="ui_lang",
+        key=UI_LANG_KEY,
     )
     st.divider()
     st.markdown(f"### {_t('session')}")
