@@ -2,6 +2,7 @@ from ui.nav import (
     ADMIN_NAV_PAGES,
     CLIENT_NAV_PAGES,
     NAV_PAGE_GLOBAL,
+    NAV_PAGE_USERS,
     default_nav_page,
     nav_page_label,
     nav_pages_for_role,
@@ -12,6 +13,11 @@ def test_admin_nav_includes_global_dashboard() -> None:
     pages = nav_pages_for_role(True)
     assert pages == ADMIN_NAV_PAGES
     assert NAV_PAGE_GLOBAL in pages
+    assert NAV_PAGE_USERS in pages
+
+
+def test_client_nav_excludes_user_management() -> None:
+    assert NAV_PAGE_USERS not in nav_pages_for_role(False)
 
 
 def test_client_nav_excludes_global_dashboard() -> None:

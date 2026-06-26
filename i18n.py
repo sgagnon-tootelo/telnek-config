@@ -63,6 +63,36 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "tab_config": "⚙️ Configuration client",
         "tab_calls": "📞 Historique des appels",
         "tab_stats": "📊 Statistiques",
+        "tab_users": "👥 Gestion des utilisateurs",
+        "users_title": "👥 Gestion des utilisateurs",
+        "users_caption": "Comptes Supabase Auth liés à la table profiles (rôle et client assigné).",
+        "users_admin_only": "Cette section est réservée aux administrateurs.",
+        "users_save": "💾 Sauvegarder les profils",
+        "users_save_ok": "✅ {count} profil(s) enregistré(s).",
+        "users_load_error": "Impossible de charger les profils : {error}",
+        "users_col_id": "ID (UUID Auth)",
+        "users_col_id_help": "Doit correspondre à auth.users.id. Pour un nouveau profil, créez d'abord l'utilisateur dans Supabase Auth.",
+        "users_col_email": "Courriel",
+        "users_col_role": "Rôle",
+        "users_col_client": "Client",
+        "users_col_client_help": "Obligatoire pour le rôle « client ». Laissez vide pour un admin.",
+        "users_col_created": "Créé le",
+        "users_error_cannot_delete_self": "Vous ne pouvez pas supprimer votre propre profil.",
+        "users_error_cannot_demote_self": "Vous ne pouvez pas retirer votre propre rôle administrateur.",
+        "users_error_id_invalid": "Chaque profil doit avoir un UUID valide (auth.users).",
+        "users_error_email_required": "Chaque profil doit avoir un courriel valide.",
+        "users_error_role_invalid": "Le rôle doit être « admin » ou « client ».",
+        "users_error_client_required": "Un client est requis pour le rôle « client ».",
+        "users_error_client_invalid": "Le client sélectionné n'existe pas.",
+        "users_error_generic": "Erreur lors de la sauvegarde : {error}",
+        "users_help_title": "ℹ️ Comment ajouter un utilisateur",
+        "users_help_body": (
+            "1. Créez l'utilisateur dans **Supabase → Authentication → Users**.\n"
+            "2. Copiez son **UUID**.\n"
+            "3. Ajoutez une ligne ici avec cet UUID, le courriel, le rôle et le client.\n"
+            "4. Sauvegardez.\n\n"
+            "La suppression d'un profil ici ne supprime pas le compte Auth — seulement la liaison rôle/client."
+        ),
         "global_dashboard": "🌍 Dashboard Global – Tous les clients",
         "auto_refresh": "🔄 Rafraîchissement automatique toutes les 5 secondes",
         "live_calls_none": "✅ Aucun appel en cours.",
@@ -338,6 +368,36 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "tab_config": "⚙️ Client configuration",
         "tab_calls": "📞 Call history",
         "tab_stats": "📊 Statistics",
+        "tab_users": "👥 User management",
+        "users_title": "👥 User management",
+        "users_caption": "Supabase Auth accounts linked to the profiles table (role and assigned client).",
+        "users_admin_only": "This section is for administrators only.",
+        "users_save": "💾 Save profiles",
+        "users_save_ok": "✅ {count} profile(s) saved.",
+        "users_load_error": "Could not load profiles: {error}",
+        "users_col_id": "ID (Auth UUID)",
+        "users_col_id_help": "Must match auth.users.id. For a new profile, create the user in Supabase Auth first.",
+        "users_col_email": "Email",
+        "users_col_role": "Role",
+        "users_col_client": "Client",
+        "users_col_client_help": "Required for « client » role. Leave empty for an admin.",
+        "users_col_created": "Created at",
+        "users_error_cannot_delete_self": "You cannot delete your own profile.",
+        "users_error_cannot_demote_self": "You cannot remove your own administrator role.",
+        "users_error_id_invalid": "Each profile must have a valid UUID (auth.users).",
+        "users_error_email_required": "Each profile must have a valid email.",
+        "users_error_role_invalid": "Role must be « admin » or « client ».",
+        "users_error_client_required": "A client is required for the « client » role.",
+        "users_error_client_invalid": "The selected client does not exist.",
+        "users_error_generic": "Error while saving: {error}",
+        "users_help_title": "ℹ️ How to add a user",
+        "users_help_body": (
+            "1. Create the user in **Supabase → Authentication → Users**.\n"
+            "2. Copy their **UUID**.\n"
+            "3. Add a row here with that UUID, email, role, and client.\n"
+            "4. Save.\n\n"
+            "Deleting a profile here does not delete the Auth account — only the role/client link."
+        ),
         "global_dashboard": "🌍 Global dashboard – All clients",
         "auto_refresh": "🔄 Auto-refresh every 5 seconds",
         "live_calls_none": "✅ No calls in progress.",
