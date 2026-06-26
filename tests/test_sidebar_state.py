@@ -1,10 +1,11 @@
 """Tests for sidebar session normalization."""
 
 from ui.sidebar_state import (
-    CLIENT_SELECTOR_KEY,
-    UI_LANG_KEY,
-    prepare_client_selector,
-    prepare_ui_lang,
+    CLIENT_STORAGE_KEY,
+    UI_LANG_STORAGE_KEY,
+    option_index,
+    resolve_stored_client,
+    resolve_stored_ui_lang,
 )
 
 
@@ -28,26 +29,23 @@ class _Session:
         del self._data[key]
 
 
-def test_prepare_client_selector_resets_invalid_value() -> None:
+def test_option_index_falls_back_to_default() -> None:
+    assert option_index(["a", "b"], "invalid", default="b") == 1
+
+
+def test_resolve_stored_client_resets_invalid_value() -> None:
     session = _Session(
         {
             "main_client_selector": "sylvain@videotron.ca",
-            CLIENT_SELECTOR_KEY: "sylvain@videotron.ca",
+            CLIENT_STORAGE_KEY: "sylvain@videotron.ca",
         }
     )
-    prepare_client_selector(session, ["electriciens", "telnekdev"])
+    assert resolve_stored_client(session, ["electriciens", "telnekdev"]) == "electriciens"
     assert session.get("main_client_selector") is None
-    assert session.get(CLIENT_SELECTOR_KEY) == "electriciens"
+    assert session.get(CLIENT_STORAGE_KEY) == "electriciens"
 
 
-def test_prepare_client_selector_keeps_valid_value() -> None:
-    session = _Session({CLIENT_SELECTOR_KEY: "telnekdev"})
-    prepare_client_selector(session, ["electriciens", "telnekdev"])
-    assert session.get(CLIENT_SELECTOR_KEY) == "telnekdev"
-
-
-def test_prepare_ui_lang_resets_invalid_value() -> None:
-    session = _Session({"ui_lang": "sylvain@videotron.ca", UI_LANG_KEY: "bad"})
-    assert prepare_ui_lang(session) == "fr"
-    assert session.get("ui_lang") is None
-    assert session.get(UI_LANG_KEY) == "fr"
+def test_resolve_stored_ui_lang_resets_invalid_value() -> None:
+    session = _Session({"ui_lang": "sylvain@videotron.ca"})
+    assert resolve_stored_ui_lang(session) == "fr"
+    assert session.get(UI_LANG_STORAGE_KEY) == "fr"

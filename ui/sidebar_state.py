@@ -1,13 +1,20 @@
-"""Sidebar widget session-state normalization."""
+"""Sidebar selection state (explicit storage, no widget keys)."""
 
 from __future__ import annotations
 
-CLIENT_SELECTOR_KEY = "telnek_client_selector"
-UI_LANG_KEY = "telnek_ui_lang"
+CLIENT_STORAGE_KEY = "telnek_selected_client_id"
+UI_LANG_STORAGE_KEY = "telnek_ui_lang_code"
 VALID_UI_LANGS = ("fr", "en")
 
-_LEGACY_CLIENT_KEYS = ("main_client_selector", "main_client_selector_v2")
-_LEGACY_LANG_KEYS = ("ui_lang", "ui_lang_v2")
+# Legacy Streamlit widget keys that may hold corrupted values.
+_WIDGET_KEYS_TO_PURGE = (
+    "main_client_selector",
+    "main_client_selector_v2",
+    "telnek_client_selector",
+    "ui_lang",
+    "ui_lang_v2",
+    "telnek_ui_lang",
+)
 
 
 def _delete_keys(session_state, keys: tuple[str, ...]) -> None:
@@ -19,27 +26,58 @@ def _delete_keys(session_state, keys: tuple[str, ...]) -> None:
                 session_state.pop(key, None)
 
 
-def prepare_client_selector(session_state, client_ids: list[str]) -> None:
-    """Reset corrupted Streamlit selectbox state for the client picker."""
-    _delete_keys(session_state, _LEGACY_CLIENT_KEYS)
+def purge_sidebar_widget_keys(session_state) -> None:
+    _delete_keys(session_state, _WIDGET_KEYS_TO_PURGE)
 
+
+def option_index(options: list[str], value: str | None, *, default: str) -> int:
+    if value in options:
+        return options.index(value)
+    if default in options:
+        return options.index(default)
+    return 0
+
+
+def resolve_stored_client(session_state, client_ids: list[str]) -> str | None:
+    purge_sidebar_widget_keys(session_state)
     if not client_ids:
-        _delete_keys(session_state, (CLIENT_SELECTOR_KEY,))
-        return
+        _delete_keys(session_state, (CLIENT_STORAGE_KEY,))
+        return None
 
-    current = session_state.get(CLIENT_SELECTOR_KEY)
-    if current not in client_ids:
-        _delete_keys(session_state, (CLIENT_SELECTOR_KEY,))
-        setattr(session_state, CLIENT_SELECTOR_KEY, client_ids[0])
+    stored = session_state.get(CLIENT_STORAGE_KEY)
+    if stored not in client_ids:
+        stored = client_ids[0]
+        setattr(session_state, CLIENT_STORAGE_KEY, stored)
+    return str(stored)
+
+
+def store_client_selection(session_state, client_id: str | None) -> None:
+    if client_id:
+        setattr(session_state, CLIENT_STORAGE_KEY, client_id)
+
+
+def resolve_stored_ui_lang(session_state) -> str:
+    purge_sidebar_widget_keys(session_state)
+    stored = session_state.get(UI_LANG_STORAGE_KEY)
+    if stored not in VALID_UI_LANGS:
+        setattr(session_state, UI_LANG_STORAGE_KEY, "fr")
+        return "fr"
+    return str(stored)
+
+
+def store_ui_lang(session_state, lang: str) -> None:
+    if lang in VALID_UI_LANGS:
+        setattr(session_state, UI_LANG_STORAGE_KEY, lang)
+
+
+# Backward-compatible aliases used by i18n helpers.
+UI_LANG_KEY = UI_LANG_STORAGE_KEY
+CLIENT_SELECTOR_KEY = CLIENT_STORAGE_KEY
 
 
 def prepare_ui_lang(session_state) -> str:
-    """Reset corrupted Streamlit selectbox state for UI language."""
-    _delete_keys(session_state, _LEGACY_LANG_KEYS)
+    return resolve_stored_ui_lang(session_state)
 
-    current = session_state.get(UI_LANG_KEY)
-    if current not in VALID_UI_LANGS:
-        _delete_keys(session_state, (UI_LANG_KEY,))
-        setattr(session_state, UI_LANG_KEY, "fr")
-        return "fr"
-    return str(current)
+
+def prepare_client_selector(session_state, client_ids: list[str]) -> None:
+    resolve_stored_client(session_state, client_ids)

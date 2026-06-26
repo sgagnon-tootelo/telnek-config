@@ -35,10 +35,14 @@ from ui.nav import (
 )
 from ui.session_panel import render_password_change_form
 from ui.sidebar_state import (
-    CLIENT_SELECTOR_KEY,
-    UI_LANG_KEY,
-    prepare_client_selector,
-    prepare_ui_lang,
+    CLIENT_STORAGE_KEY,
+    UI_LANG_STORAGE_KEY,
+    option_index,
+    purge_sidebar_widget_keys,
+    resolve_stored_client,
+    resolve_stored_ui_lang,
+    store_client_selection,
+    store_ui_lang,
 )
 from ui.theme import inject_brand_css
 
@@ -77,15 +81,17 @@ def render_app_header() -> None:
 
 
 def render_login_page() -> None:
-    prepare_ui_lang(st.session_state)
+    lang_options = ["fr", "en"]
+    stored_lang = resolve_stored_ui_lang(st.session_state)
     top_left, top_right = st.columns([3, 1])
     with top_right:
-        st.selectbox(
+        chosen_lang = st.selectbox(
             _t("ui_language"),
-            options=["fr", "en"],
+            options=lang_options,
+            index=option_index(lang_options, stored_lang, default="fr"),
             format_func=lambda x: "Français" if x == "fr" else "English",
-            key=UI_LANG_KEY,
         )
+        store_ui_lang(st.session_state, chosen_lang)
 
     _, center, _ = st.columns([0.2, 3.4, 0.2])
     with center:
@@ -148,7 +154,6 @@ def init_supabase() -> Client:
 
 supabase: Client = init_supabase()
 
-prepare_ui_lang(st.session_state)
 if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
     st.session_state.user_email = None
@@ -219,10 +224,12 @@ def logout_user() -> None:
         "user_client_id",
         "profile",
         "main_nav_page",
-        CLIENT_SELECTOR_KEY,
-        UI_LANG_KEY,
+        CLIENT_STORAGE_KEY,
+        UI_LANG_STORAGE_KEY,
         "main_client_selector",
         "ui_lang",
+        "telnek_client_selector",
+        "telnek_ui_lang",
         "admin_tab_index",
     ):
         if key in st.session_state:
@@ -292,8 +299,7 @@ client_labels = {
     c["id"]: c.get("company_name") or c["id"] for c in clients_sorted if c.get("id")
 }
 ensure_nav_page(is_admin, st.session_state)
-prepare_client_selector(st.session_state, client_ids)
-prepare_ui_lang(st.session_state)
+purge_sidebar_widget_keys(st.session_state)
 
 with st.sidebar:
     st.markdown(f"### {_t('nav_section')}")
@@ -314,15 +320,17 @@ with st.sidebar:
             st.caption(_t("no_clients"))
             selected_client_id = None
         else:
+            stored_client = resolve_stored_client(st.session_state, client_ids)
             selected_client_id = st.selectbox(
                 _t("select_client"),
                 options=client_ids,
+                index=option_index(client_ids, stored_client, default=client_ids[0]),
                 format_func=lambda client_id: (
                     f"{client_labels.get(client_id, client_id)} ({client_id})"
                 ),
-                key=CLIENT_SELECTOR_KEY,
                 label_visibility="collapsed",
             )
+            store_client_selection(st.session_state, selected_client_id)
     else:
         selected_client_id = client_ids[0] if client_ids else None
         if selected_client_id:
@@ -338,13 +346,15 @@ with st.sidebar:
             st.caption(f"`{selected_client_id}`")
 
     st.divider()
-    prepare_ui_lang(st.session_state)
-    st.selectbox(
+    lang_options = ["fr", "en"]
+    stored_lang = resolve_stored_ui_lang(st.session_state)
+    chosen_lang = st.selectbox(
         _t("ui_language"),
-        options=["fr", "en"],
+        options=lang_options,
+        index=option_index(lang_options, stored_lang, default="fr"),
         format_func=lambda x: "Français" if x == "fr" else "English",
-        key=UI_LANG_KEY,
     )
+    store_ui_lang(st.session_state, chosen_lang)
     st.divider()
     st.markdown(f"### {_t('session')}")
     st.markdown(f"**{st.session_state.get('user_email', '—')}**")
