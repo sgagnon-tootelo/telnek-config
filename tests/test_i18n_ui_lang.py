@@ -23,16 +23,14 @@ class _Session:
 
 def test_normalize_ui_lang_resets_invalid_value() -> None:
     from i18n import normalize_ui_lang
-    from ui.sidebar_state import UI_LANG_STORAGE_KEY
 
     session = _Session({"ui_lang": "sylvain@videotron.ca"})
     assert normalize_ui_lang(session) == "fr"
-    assert session.get(UI_LANG_STORAGE_KEY) == "fr"
+    assert session.get("ui_lang") == "fr"
 
 
 def test_normalize_ui_lang_keeps_valid_value() -> None:
     from i18n import normalize_ui_lang
-    from ui.sidebar_state import UI_LANG_STORAGE_KEY
 
-    session = _Session({UI_LANG_STORAGE_KEY: "en"})
+    session = _Session({"ui_lang": "en"})
     assert normalize_ui_lang(session) == "en"

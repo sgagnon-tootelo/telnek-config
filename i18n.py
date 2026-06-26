@@ -690,9 +690,11 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
 
 
 def normalize_ui_lang(session_state) -> str:
-    from ui.sidebar_state import prepare_ui_lang
-
-    return prepare_ui_lang(session_state)
+    lang = session_state.get("ui_lang", "fr")
+    if lang not in TRANSLATIONS:
+        lang = "fr"
+        session_state.ui_lang = lang
+    return lang
 
 
 def get_ui_lang(session_state) -> str:

@@ -34,15 +34,28 @@ from ui.nav import (
     nav_pages_for_role,
 )
 from ui.session_panel import render_password_change_form
-from ui.sidebar_state import (
-    CLIENT_PICKER_WIDGET_KEY,
-    CLIENT_STORAGE_KEY,
-    UI_LANG_STORAGE_KEY,
-    purge_sidebar_widget_keys,
-    render_client_selector,
-    render_language_selector,
-)
 from ui.theme import inject_brand_css
+
+_LEGACY_SIDEBAR_KEYS = (
+    "telnek_selected_client_id",
+    "telnek_client_picker",
+    "telnek_ui_lang_code",
+    "telnek_client_selector",
+    "telnek_ui_lang",
+    "telnek_ui_lang_radio",
+    "telnek_ui_lang_radio_login",
+)
+
+
+def _purge_legacy_sidebar_keys(session_state) -> None:
+    for key in _LEGACY_SIDEBAR_KEYS:
+        session_state.pop(key, None)
+
+
+def _ensure_ui_lang(session_state) -> None:
+    lang = session_state.get("ui_lang", "fr")
+    if lang not in ("fr", "en"):
+        session_state.ui_lang = "fr"
 
 
 def _t(key: str, **kwargs) -> str:
@@ -79,13 +92,14 @@ def render_app_header() -> None:
 
 
 def render_login_page() -> None:
+    _ensure_ui_lang(st.session_state)
     top_left, top_right = st.columns([3, 1])
     with top_right:
-        render_language_selector(
-            st.session_state,
-            _t,
-            horizontal=False,
-            widget_key="telnek_ui_lang_radio_login",
+        st.selectbox(
+            _t("ui_language"),
+            options=["fr", "en"],
+            format_func=lambda x: "Français" if x == "fr" else "English",
+            key="ui_lang",
         )
 
     _, center, _ = st.columns([0.2, 3.4, 0.2])
@@ -149,6 +163,10 @@ def init_supabase() -> Client:
 
 supabase: Client = init_supabase()
 
+if "ui_lang" not in st.session_state:
+    st.session_state.ui_lang = "fr"
+else:
+    _ensure_ui_lang(st.session_state)
 if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
     st.session_state.user_email = None
@@ -218,15 +236,8 @@ def logout_user() -> None:
         "user_role",
         "user_client_id",
         "profile",
-        "main_nav_page",
-        CLIENT_STORAGE_KEY,
-        CLIENT_PICKER_WIDGET_KEY,
-        UI_LANG_STORAGE_KEY,
         "main_client_selector",
-        "ui_lang",
-        "telnek_client_selector",
-        "telnek_ui_lang",
-        "telnek_ui_lang_radio",
+        "main_nav_page",
         "admin_tab_index",
     ):
         if key in st.session_state:
@@ -292,11 +303,9 @@ if not clients:
 is_admin = st.session_state.get("user_role") == "admin"
 clients_sorted = sorted(clients, key=lambda c: c.get("id", "").lower())
 client_ids = [c["id"] for c in clients_sorted if c.get("id")]
-client_labels = {
-    c["id"]: c.get("company_name") or c["id"] for c in clients_sorted if c.get("id")
-}
 ensure_nav_page(is_admin, st.session_state)
-purge_sidebar_widget_keys(st.session_state)
+_purge_legacy_sidebar_keys(st.session_state)
+_ensure_ui_lang(st.session_state)
 
 with st.sidebar:
     st.markdown(f"### {_t('nav_section')}")
@@ -313,16 +322,19 @@ with st.sidebar:
     st.markdown(f"### {_t('client_section')}")
 
     if is_admin:
-        if not client_ids:
-            st.caption(_t("no_clients"))
-            selected_client_id = None
+        prev_value = st.session_state.get("main_client_selector")
+        if prev_value not in client_ids:
+            st.session_state.pop("main_client_selector", None)
+            default_index = 0
         else:
-            selected_client_id = render_client_selector(
-                st.session_state,
-                client_ids,
-                client_labels,
-                _t("select_client"),
-            )
+            default_index = client_ids.index(prev_value)
+        selected_client_id = st.selectbox(
+            _t("select_client"),
+            options=client_ids,
+            key="main_client_selector",
+            index=default_index,
+            label_visibility="collapsed",
+        )
     else:
         selected_client_id = client_ids[0] if client_ids else None
         if selected_client_id:
@@ -338,7 +350,12 @@ with st.sidebar:
             st.caption(f"`{selected_client_id}`")
 
     st.divider()
-    render_language_selector(st.session_state, _t)
+    st.selectbox(
+        _t("ui_language"),
+        options=["fr", "en"],
+        format_func=lambda x: "Français" if x == "fr" else "English",
+        key="ui_lang",
+    )
     st.divider()
     st.markdown(f"### {_t('session')}")
     st.markdown(f"**{st.session_state.get('user_email', '—')}**")
