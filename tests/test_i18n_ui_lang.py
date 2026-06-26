@@ -1,0 +1,30 @@
+"""Tests for UI language session normalization."""
+
+
+class _Session:
+    def __init__(self, data: dict):
+        self._data = data
+
+    def get(self, key: str, default=None):
+        return self._data.get(key, default)
+
+    def __setattr__(self, key: str, value) -> None:
+        if key == "_data":
+            super().__setattr__(key, value)
+        else:
+            self._data[key] = value
+
+
+def test_normalize_ui_lang_resets_invalid_value() -> None:
+    from i18n import normalize_ui_lang
+
+    session = _Session({"ui_lang": "sylvain@videotron.ca"})
+    assert normalize_ui_lang(session) == "fr"
+    assert session.get("ui_lang") == "fr"
+
+
+def test_normalize_ui_lang_keeps_valid_value() -> None:
+    from i18n import normalize_ui_lang
+
+    session = _Session({"ui_lang": "en"})
+    assert normalize_ui_lang(session) == "en"

@@ -10,7 +10,7 @@ import streamlit as st
 from supabase import Client, create_client
 
 from app_context import AppContext
-from i18n import resolve_client_timezone, t
+from i18n import normalize_ui_lang, resolve_client_timezone, t
 from views.calls import render_calls_page
 from views.config import render_config_page
 from views.dashboard import render_dashboard_page
@@ -143,6 +143,8 @@ supabase: Client = init_supabase()
 
 if "ui_lang" not in st.session_state:
     st.session_state.ui_lang = "fr"
+else:
+    normalize_ui_lang(st.session_state)
 if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
     st.session_state.user_email = None
@@ -320,6 +322,7 @@ with st.sidebar:
             st.caption(f"`{selected_client_id}`")
 
     st.divider()
+    normalize_ui_lang(st.session_state)
     st.selectbox(
         _t("ui_language"),
         options=["fr", "en"],

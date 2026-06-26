@@ -689,9 +689,19 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
 }
 
 
-def get_ui_lang(session_state) -> str:
+VALID_UI_LANGS = ("fr", "en")
+
+
+def normalize_ui_lang(session_state) -> str:
     lang = session_state.get("ui_lang", "fr")
-    return lang if lang in TRANSLATIONS else "fr"
+    if lang not in VALID_UI_LANGS:
+        session_state.ui_lang = "fr"
+        return "fr"
+    return lang
+
+
+def get_ui_lang(session_state) -> str:
+    return normalize_ui_lang(session_state)
 
 
 def t(key: str, session_state, **kwargs) -> str:
