@@ -14,6 +14,7 @@ from i18n import resolve_client_timezone, t
 from views.calls import render_calls_page
 from views.config import render_config_page
 from views.dashboard import render_dashboard_page
+from views.account import render_account_page
 from views.stats import render_stats_page
 from ui.components import app_header_html
 from ui.metrics_display import (
@@ -33,7 +34,6 @@ from ui.nav import (
     nav_page_label,
     nav_pages_for_role,
 )
-from ui.session_panel import render_password_change_entry
 from ui.theme import inject_brand_css
 
 _LEGACY_SIDEBAR_KEYS = (
@@ -44,6 +44,7 @@ _LEGACY_SIDEBAR_KEYS = (
     "telnek_ui_lang",
     "telnek_ui_lang_radio",
     "telnek_ui_lang_radio_login",
+    "telnek_btn_change_password",
 )
 
 
@@ -364,11 +365,6 @@ with st.sidebar:
     st.markdown(f"{_t('role')} : {role_emoji} **{role}**")
     if st.session_state.get("user_client_id"):
         st.caption(f"{_t('restricted_client')} : `{st.session_state['user_client_id']}`")
-    render_password_change_entry(
-        supabase=supabase,
-        t_fn=_t,
-        user_email=st.session_state.get("user_email"),
-    )
     st.divider()
     if st.button(_t("logout"), type="secondary", use_container_width=True):
         logout_user()
@@ -403,5 +399,7 @@ if selected_client_id:
         from views.users import render_users_page
 
         render_users_page(ctx)
+    elif nav_page == "account":
+        render_account_page(ctx)
 
 render_app_footer()

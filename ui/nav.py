@@ -5,6 +5,7 @@ NAV_PAGE_CONFIG = "config"
 NAV_PAGE_CALLS = "calls"
 NAV_PAGE_STATS = "stats"
 NAV_PAGE_USERS = "users"
+NAV_PAGE_ACCOUNT = "account"
 
 ADMIN_NAV_PAGES = [
     NAV_PAGE_GLOBAL,
@@ -12,11 +13,13 @@ ADMIN_NAV_PAGES = [
     NAV_PAGE_CALLS,
     NAV_PAGE_STATS,
     NAV_PAGE_USERS,
+    NAV_PAGE_ACCOUNT,
 ]
 CLIENT_NAV_PAGES = [
     NAV_PAGE_CONFIG,
     NAV_PAGE_CALLS,
     NAV_PAGE_STATS,
+    NAV_PAGE_ACCOUNT,
 ]
 
 NAV_PAGE_LABEL_KEYS = {
@@ -25,6 +28,7 @@ NAV_PAGE_LABEL_KEYS = {
     NAV_PAGE_CALLS: "tab_calls",
     NAV_PAGE_STATS: "tab_stats",
     NAV_PAGE_USERS: "tab_users",
+    NAV_PAGE_ACCOUNT: "tab_account",
 }
 
 
