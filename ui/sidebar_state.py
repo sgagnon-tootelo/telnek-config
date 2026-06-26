@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import streamlit as st
+
 CLIENT_STORAGE_KEY = "telnek_selected_client_id"
 UI_LANG_STORAGE_KEY = "telnek_ui_lang_code"
 VALID_UI_LANGS = ("fr", "en")
@@ -81,3 +83,24 @@ def prepare_ui_lang(session_state) -> str:
 
 def prepare_client_selector(session_state, client_ids: list[str]) -> None:
     resolve_stored_client(session_state, client_ids)
+
+
+def render_language_selector(
+    session_state,
+    t_fn,
+    *,
+    horizontal: bool = True,
+    widget_key: str = "telnek_ui_lang_radio",
+) -> None:
+    """Radio buttons avoid Streamlit selectbox 'No results' on corrupted lang state."""
+    lang_options = list(VALID_UI_LANGS)
+    stored_lang = resolve_stored_ui_lang(session_state)
+    chosen_lang = st.radio(
+        t_fn("ui_language"),
+        options=lang_options,
+        index=option_index(lang_options, stored_lang, default="fr"),
+        format_func=lambda code: "Français" if code == "fr" else "English",
+        horizontal=horizontal,
+        key=widget_key,
+    )
+    store_ui_lang(session_state, chosen_lang)
