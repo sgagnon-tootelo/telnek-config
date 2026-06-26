@@ -78,7 +78,10 @@ def render_users_page(ctx: AppContext) -> None:
 
     profiles = fetch_result.profiles
     if fetch_result.source == "table":
-        st.warning(t("users_last_login_rpc_missing"))
+        if fetch_result.rpc_error and "42501" in fetch_result.rpc_error:
+            st.warning(t("users_last_login_forbidden"))
+        else:
+            st.warning(t("users_last_login_rpc_missing"))
         if fetch_result.rpc_error:
             st.caption(t("users_last_login_rpc_error", error=fetch_result.rpc_error))
     elif not fetch_result.has_last_login_data:
