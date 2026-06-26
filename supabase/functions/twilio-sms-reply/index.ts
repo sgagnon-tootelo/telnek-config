@@ -1,5 +1,9 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
+import {
+  markAppointmentCancelledInGoogleCalendar,
+  markAppointmentConfirmedInGoogleCalendar,
+} from './google_calendar.ts'
 
 const supabase = createClient(
   Deno.env.get('SUPABASE_URL')!,
@@ -14,6 +18,7 @@ const DEBUG_MODE = false
 
 type AppointmentRow = {
   id: string
+  client_id: string | null
   google_event_id: string | null
   appointment_name: string | null
   appointment_number: string | null
@@ -23,6 +28,11 @@ type AppointmentRow = {
   reminder_sent: boolean | null
   started_at: string | null
   appointment_start: string | null
+}
+
+type ClientCalendarConfig = {
+  google_refresh_token: string | null
+  calendar_id: string | null
 }
 
 function normalizePhone(raw: string): string {
@@ -54,6 +64,47 @@ function pickPendingAppointment(rows: AppointmentRow[]): AppointmentRow | undefi
   })[0]
 }
 
+async function loadClientCalendarConfig(clientId: string): Promise<ClientCalendarConfig | null> {
+  const { data, error } = await supabase
+    .from('clients')
+    .select('google_refresh_token, calendar_id')
+    .eq('id', clientId)
+    .maybeSingle()
+
+  if (error) throw error
+  return data
+}
+
+async function syncGoogleCalendar(
+  rdv: AppointmentRow,
+  action: 'confirmation' | 'annulation',
+): Promise<string | null> {
+  if (!rdv.google_event_id || !rdv.client_id) {
+    return 'missing google_event_id or client_id'
+  }
+
+  const client = await loadClientCalendarConfig(rdv.client_id)
+  if (!client?.google_refresh_token) {
+    return 'missing google_refresh_token for client'
+  }
+
+  const calendarId = client.calendar_id || 'primary'
+  if (action === 'confirmation') {
+    await markAppointmentConfirmedInGoogleCalendar(
+      client.google_refresh_token,
+      calendarId,
+      rdv.google_event_id,
+    )
+  } else {
+    await markAppointmentCancelledInGoogleCalendar(
+      client.google_refresh_token,
+      calendarId,
+      rdv.google_event_id,
+    )
+  }
+  return null
+}
+
 const TWIML_EMPTY = '<?xml version="1.0" encoding="UTF-8"?><Response></Response>'
 
 serve(async (req) => {
@@ -71,6 +122,7 @@ serve(async (req) => {
     confirmed: false,
     cancelled: false,
     sms_sent: false,
+    google_calendar_updated: false,
   }
 
   try {
@@ -90,7 +142,7 @@ serve(async (req) => {
     const { data: results, error: queryError } = await supabase
       .from('appels')
       .select(
-        'id, google_event_id, appointment_name, appointment_number, caller_number, appointment_confirmed, appointment_cancelled, reminder_sent, started_at, appointment_start'
+        'id, client_id, google_event_id, appointment_name, appointment_number, caller_number, appointment_confirmed, appointment_cancelled, reminder_sent, started_at, appointment_start'
       )
       .eq('appointment_booked', true)
       .or(`appointment_number.ilike.%${cleanNumber}%,caller_number.ilike.%${cleanNumber}%`)
@@ -123,6 +175,18 @@ serve(async (req) => {
           debug.update_error = updateError.message
         } else {
           debug.confirmed = true
+          try {
+            const googleError = await syncGoogleCalendar(rdv, 'confirmation')
+            if (googleError) {
+              debug.google_calendar_skip = googleError
+            } else {
+              debug.google_calendar_updated = true
+            }
+          } catch (googleError) {
+            debug.google_calendar_error =
+              googleError instanceof Error ? googleError.message : String(googleError)
+          }
+
           await sendTwilioSms(
             rawFrom,
             `✅ Parfait ${rdv.appointment_name || ''} ! Votre rendez-vous est maintenant CONFIRMÉ. Merci !`
@@ -142,6 +206,18 @@ serve(async (req) => {
           debug.update_error = updateError.message
         } else {
           debug.cancelled = true
+          try {
+            const googleError = await syncGoogleCalendar(rdv, 'annulation')
+            if (googleError) {
+              debug.google_calendar_skip = googleError
+            } else {
+              debug.google_calendar_updated = true
+            }
+          } catch (googleError) {
+            debug.google_calendar_error =
+              googleError instanceof Error ? googleError.message : String(googleError)
+          }
+
           await sendTwilioSms(rawFrom, `😔 Votre rendez-vous a été annulé. Merci pour votre réponse.`)
           debug.sms_sent = true
         }
