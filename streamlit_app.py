@@ -15,7 +15,6 @@ from views.calls import render_calls_page
 from views.config import render_config_page
 from views.dashboard import render_dashboard_page
 from views.stats import render_stats_page
-from views.users import render_users_page
 from ui.components import app_header_html
 from ui.metrics_display import (
     LATENCY_COST_RAW_COLUMNS,
@@ -29,7 +28,6 @@ from ui.nav import (
     NAV_PAGE_CONFIG,
     NAV_PAGE_GLOBAL,
     NAV_PAGE_STATS,
-    NAV_PAGE_USERS,
     default_nav_page,
     ensure_nav_page,
     nav_page_label,
@@ -365,7 +363,9 @@ if selected_client_id:
         render_calls_page(ctx)
     elif nav_page == NAV_PAGE_STATS:
         render_stats_page(ctx)
-    elif nav_page == NAV_PAGE_USERS:
+    elif nav_page == "users":
+        from views.users import render_users_page
+
         render_users_page(ctx)
 
 render_app_footer()
