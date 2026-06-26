@@ -1,6 +1,6 @@
 """Tests for auth_password helpers."""
 
-from auth_password import change_password, validate_password_fields
+from auth_password import change_password, request_password_reset, validate_password_fields
 
 
 def test_validate_password_fields_requires_current() -> None:
@@ -95,3 +95,41 @@ def test_change_password_invalid_current() -> None:
     )
     assert error == "password_current_invalid"
     assert not auth.update_called
+
+
+class _FakeAuthReset:
+    def __init__(self, *, ok: bool = True):
+        self.ok = ok
+        self.called_with: tuple[str, dict] | None = None
+
+    def reset_password_for_email(self, email: str, options: dict):
+        self.called_with = (email, options)
+        if not self.ok:
+            raise RuntimeError("smtp error")
+
+
+def test_request_password_reset_success() -> None:
+    auth = _FakeAuthReset()
+    client = type("C", (), {"auth": auth})()
+    error, detail = request_password_reset(
+        client,
+        email="User@Example.com",
+        redirect_to="https://telnek-config.streamlit.app",
+    )
+    assert error is None
+    assert detail is None
+    assert auth.called_with == (
+        "user@example.com",
+        {"redirect_to": "https://telnek-config.streamlit.app"},
+    )
+
+
+def test_request_password_reset_failure() -> None:
+    auth = _FakeAuthReset(ok=False)
+    client = type("C", (), {"auth": auth})()
+    error, _detail = request_password_reset(
+        client,
+        email="user@example.com",
+        redirect_to="https://example.com",
+    )
+    assert error == "password_reset_failed"

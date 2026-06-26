@@ -1,4 +1,4 @@
-"""Password change helpers for authenticated dashboard users."""
+"""Password helpers — email reset avoids password widgets in Streamlit (sidebar corruption)."""
 
 from __future__ import annotations
 
@@ -47,4 +47,21 @@ def change_password(
     except Exception as exc:
         return "password_update_failed", str(exc)
 
+    return None, None
+
+
+def request_password_reset(
+    supabase: Any,
+    *,
+    email: str,
+    redirect_to: str,
+) -> tuple[str | None, str | None]:
+    """Send Supabase password-reset email. Return (error_code, technical_detail)."""
+    try:
+        supabase.auth.reset_password_for_email(
+            email.strip().lower(),
+            {"redirect_to": redirect_to},
+        )
+    except Exception as exc:
+        return "password_reset_failed", str(exc)
     return None, None

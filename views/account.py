@@ -1,11 +1,18 @@
-"""Account page — session info and password change."""
+"""Account page — session info and password reset by email."""
 
 from __future__ import annotations
 
 import streamlit as st
 
 from app_context import AppContext
-from ui.session_panel import can_change_password, render_password_change_form
+from ui.session_panel import can_change_password, render_password_reset_request
+
+
+def _password_reset_redirect_url() -> str:
+    try:
+        return str(st.secrets["PASSWORD_RESET_REDIRECT_URL"]).strip()
+    except Exception:
+        return "https://telnek-config.streamlit.app"
 
 
 def render_account_page(ctx: AppContext) -> None:
@@ -29,8 +36,9 @@ def render_account_page(ctx: AppContext) -> None:
         st.info(t("password_change_dev_unavailable"))
         return
 
-    render_password_change_form(
+    render_password_reset_request(
         supabase=ctx.supabase,
         t_fn=t,
         user_email=user_email,
+        redirect_to=_password_reset_redirect_url(),
     )

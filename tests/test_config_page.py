@@ -16,7 +16,8 @@ def test_config_section_labels_exist_in_fr_and_en() -> None:
         "contacts_save",
         "contacts_save_ok_none",
         "tab_account",
-        "password_change_ok",
+        "password_reset_send",
+        "password_reset_sent",
         "transfer_numbers_legacy",
     ]
     for key in keys:
