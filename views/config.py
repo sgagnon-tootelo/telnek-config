@@ -179,6 +179,8 @@ def render_config_page(ctx: AppContext) -> None:
 
     with st.expander(t("config_section_notifications"), expanded=False):
         st.caption(t("sms_caption"))
+        if client.get("transfer_mode", "none") == "none":
+            st.caption(t("notifications_contacts_hint"))
         admin_phones_raw = client.get("admin_phones")
         if isinstance(admin_phones_raw, list):
             current_phones = "\n".join(
@@ -324,8 +326,8 @@ def render_config_page(ctx: AppContext) -> None:
         transfer_mode_selected = selected_mode["value"]
 
         transfer_numbers_edited = _safe_json_dumps(client.get("transfer_numbers", {}))
+        render_contacts_editor(ctx, transfer_mode=transfer_mode_selected)
         if transfer_mode_selected != "none":
-            render_contacts_editor(ctx, transfer_mode=transfer_mode_selected)
             if ctx.is_admin:
                 with st.expander(t("transfer_numbers_legacy"), expanded=False):
                     st.caption(t("transfer_numbers_legacy_hint"))

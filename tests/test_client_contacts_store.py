@@ -40,6 +40,22 @@ def test_normalize_contact_row_requires_phone_when_transferable() -> None:
     assert raised
 
 
+def test_normalize_contact_row_requires_phone_when_notify_enabled() -> None:
+    try:
+        normalize_contact_row(
+            {
+                "display_name": "Marjolaine",
+                "can_transfer": False,
+                "notify_message": True,
+            }
+        )
+        raised = False
+    except ValueError as exc:
+        raised = True
+        assert str(exc) == "phone_required_for_notify"
+    assert raised
+
+
 def test_contacts_to_editor_rows_flattens_keywords() -> None:
     rows = contacts_to_editor_rows(
         [{"id": "x", "display_name": "Ventes", "keywords": ["a", "b"], "priority": 10, "active": True}]

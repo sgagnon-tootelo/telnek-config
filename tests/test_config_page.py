@@ -10,7 +10,11 @@ def test_config_section_labels_exist_in_fr_and_en() -> None:
         "config_section_options",
         "config_section_google",
         "contacts_section_title",
+        "contacts_section_title_none",
+        "contacts_section_caption_none",
+        "notifications_contacts_hint",
         "contacts_save",
+        "contacts_save_ok_none",
         "transfer_numbers_legacy",
     ]
     for key in keys:

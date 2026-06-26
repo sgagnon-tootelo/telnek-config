@@ -91,9 +91,14 @@ def normalize_contact_row(row: dict[str, Any], *, used_slugs: set[str] | None = 
         contact_type = "department"
 
     can_transfer = _clean_bool(row.get("can_transfer"), default=True)
+    notify_message = _clean_bool(row.get("notify_message"), default=False)
+    notify_rdv = _clean_bool(row.get("notify_rdv"), default=False)
+    notify_transfer_fail = _clean_bool(row.get("notify_transfer_fail"), default=True)
     phone = _clean_str(row.get("phone_e164")) or None
     if can_transfer and not phone:
         raise ValueError("phone_required_for_transfer")
+    if (notify_message or notify_rdv or notify_transfer_fail) and not phone:
+        raise ValueError("phone_required_for_notify")
 
     return {
         "id": _clean_str(row.get("id")) or None,
@@ -106,9 +111,9 @@ def normalize_contact_row(row: dict[str, Any], *, used_slugs: set[str] | None = 
         "sms_enabled": _clean_bool(row.get("sms_enabled"), default=True),
         "email_enabled": _clean_bool(row.get("email_enabled"), default=False),
         "can_transfer": can_transfer,
-        "notify_message": _clean_bool(row.get("notify_message"), default=False),
-        "notify_rdv": _clean_bool(row.get("notify_rdv"), default=False),
-        "notify_transfer_fail": _clean_bool(row.get("notify_transfer_fail"), default=True),
+        "notify_message": notify_message,
+        "notify_rdv": notify_rdv,
+        "notify_transfer_fail": notify_transfer_fail,
         "keywords": parse_keywords(row.get("keywords")),
         "priority": _clean_int(row.get("priority"), default=100),
         "active": _clean_bool(row.get("active"), default=True),
