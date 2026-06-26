@@ -1,6 +1,7 @@
 """Tests for sidebar session normalization."""
 
 from ui.sidebar_state import (
+    CLIENT_PICKER_WIDGET_KEY,
     CLIENT_STORAGE_KEY,
     UI_LANG_STORAGE_KEY,
     option_index,
@@ -49,3 +50,14 @@ def test_resolve_stored_ui_lang_resets_invalid_value() -> None:
     session = _Session({"ui_lang": "sylvain@videotron.ca"})
     assert resolve_stored_ui_lang(session) == "fr"
     assert session.get(UI_LANG_STORAGE_KEY) == "fr"
+
+
+def test_resolve_stored_client_purges_corrupted_picker_widget() -> None:
+    session = _Session(
+        {
+            CLIENT_PICKER_WIDGET_KEY: "sy@vaing@videotron.ca",
+            CLIENT_STORAGE_KEY: "electriciens",
+        }
+    )
+    assert resolve_stored_client(session, ["electriciens", "telnekdev"]) == "electriciens"
+    assert session.get(CLIENT_PICKER_WIDGET_KEY) is None

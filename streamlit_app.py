@@ -35,11 +35,12 @@ from ui.nav import (
 )
 from ui.session_panel import render_password_change_form
 from ui.sidebar_state import (
+    CLIENT_PICKER_WIDGET_KEY,
     CLIENT_STORAGE_KEY,
     UI_LANG_STORAGE_KEY,
     purge_sidebar_widget_keys,
+    render_client_selector,
     render_language_selector,
-    resolve_stored_client,
 )
 from ui.theme import inject_brand_css
 
@@ -219,11 +220,13 @@ def logout_user() -> None:
         "profile",
         "main_nav_page",
         CLIENT_STORAGE_KEY,
+        CLIENT_PICKER_WIDGET_KEY,
         UI_LANG_STORAGE_KEY,
         "main_client_selector",
         "ui_lang",
         "telnek_client_selector",
         "telnek_ui_lang",
+        "telnek_ui_lang_radio",
         "admin_tab_index",
     ):
         if key in st.session_state:
@@ -314,15 +317,11 @@ with st.sidebar:
             st.caption(_t("no_clients"))
             selected_client_id = None
         else:
-            resolve_stored_client(st.session_state, client_ids)
-            selected_client_id = st.selectbox(
+            selected_client_id = render_client_selector(
+                st.session_state,
+                client_ids,
+                client_labels,
                 _t("select_client"),
-                options=client_ids,
-                format_func=lambda client_id: (
-                    f"{client_labels.get(client_id, client_id)} ({client_id})"
-                ),
-                key=CLIENT_STORAGE_KEY,
-                label_visibility="collapsed",
             )
     else:
         selected_client_id = client_ids[0] if client_ids else None
