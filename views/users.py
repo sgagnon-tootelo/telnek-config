@@ -71,10 +71,18 @@ def render_users_page(ctx: AppContext) -> None:
     valid_client_ids = set(client_ids)
 
     try:
-        profiles = fetch_profiles(ctx.supabase)
+        fetch_result = fetch_profiles(ctx.supabase)
     except Exception as exc:
         st.error(t("users_load_error", error=exc))
         return
+
+    profiles = fetch_result.profiles
+    if fetch_result.source == "table":
+        st.warning(t("users_last_login_rpc_missing"))
+        if fetch_result.rpc_error:
+            st.caption(t("users_last_login_rpc_error", error=fetch_result.rpc_error))
+    elif not fetch_result.has_last_login_data:
+        st.info(t("users_last_login_all_empty"))
 
     rows = profiles_to_editor_rows(profiles)
     df = pd.DataFrame(rows, columns=EDITOR_COLUMNS) if rows else pd.DataFrame(columns=EDITOR_COLUMNS)

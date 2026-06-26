@@ -158,7 +158,7 @@ class _FakeSupabase:
         self._rpc_data = rpc_data
         self._rpc_fail = rpc_fail
 
-    def rpc(self, _name: str):
+    def rpc(self, _name: str, _params=None):
         return _FakeRpc(self._rpc_data, fail=self._rpc_fail)
 
     def table(self, name: str):
@@ -169,8 +169,9 @@ def test_fetch_profiles_returns_rows() -> None:
     client = _FakeSupabase(
         [{"id": "1", "email": "a@b.com", "role": "admin", "client_id": None}]
     )
-    rows = fetch_profiles(client)
-    assert len(rows) == 1
+    result = fetch_profiles(client)
+    assert len(result.profiles) == 1
+    assert result.source == "table"
 
 
 def test_fetch_profiles_prefers_rpc_with_last_sign_in() -> None:
@@ -187,8 +188,9 @@ def test_fetch_profiles_prefers_rpc_with_last_sign_in() -> None:
             }
         ],
     )
-    rows = fetch_profiles(client)
-    assert rows[0]["last_sign_in_at"] == "2026-06-20T10:00:00+00:00"
+    result = fetch_profiles(client)
+    assert result.source == "rpc"
+    assert result.profiles[0]["last_sign_in_at"] == "2026-06-20T10:00:00+00:00"
 
 
 def test_fetch_profiles_falls_back_when_rpc_missing() -> None:
@@ -196,8 +198,10 @@ def test_fetch_profiles_falls_back_when_rpc_missing() -> None:
         [{"id": "1", "email": "a@b.com", "role": "admin", "client_id": None}],
         rpc_fail=True,
     )
-    rows = fetch_profiles(client)
-    assert len(rows) == 1
+    result = fetch_profiles(client)
+    assert result.source == "table"
+    assert result.rpc_error is not None
+    assert len(result.profiles) == 1
 
 
 def test_save_profiles_updates_and_deletes() -> None:

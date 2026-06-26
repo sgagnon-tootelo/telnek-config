@@ -3,9 +3,22 @@
 from __future__ import annotations
 
 import re
-from typing import Any
+from dataclasses import dataclass
+from typing import Any, Literal
 
 PROFILE_ROLES = ("admin", "client")
+FetchSource = Literal["rpc", "table"]
+
+
+@dataclass(frozen=True)
+class FetchProfilesResult:
+    profiles: list[dict[str, Any]]
+    source: FetchSource
+    rpc_error: str | None = None
+
+    @property
+    def has_last_login_data(self) -> bool:
+        return any(profile.get("last_sign_in_at") for profile in self.profiles)
 _UUID_RE = re.compile(
     r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
     re.IGNORECASE,
@@ -86,13 +99,17 @@ def profiles_to_editor_rows(profiles: list[dict[str, Any]]) -> list[dict[str, An
     return rows
 
 
-def fetch_profiles(supabase: Any) -> list[dict[str, Any]]:
+def fetch_profiles(supabase: Any) -> FetchProfilesResult:
+    rpc_error: str | None = None
     try:
-        response = supabase.rpc("fetch_profiles_for_admin").execute()
+        response = supabase.rpc("fetch_profiles_for_admin", {}).execute()
         if response.data is not None:
-            return response.data
-    except Exception:
-        pass
+            return FetchProfilesResult(
+                profiles=response.data,
+                source="rpc",
+            )
+    except Exception as exc:
+        rpc_error = str(exc)
 
     response = (
         supabase.table("profiles")
@@ -100,7 +117,11 @@ def fetch_profiles(supabase: Any) -> list[dict[str, Any]]:
         .order("email")
         .execute()
     )
-    return response.data or []
+    return FetchProfilesResult(
+        profiles=response.data or [],
+        source="table",
+        rpc_error=rpc_error,
+    )
 
 
 def save_profiles(
