@@ -54,22 +54,46 @@ def normalize_profile_row(
     }
 
 
+def format_last_sign_in(value: Any) -> str:
+    if value is None:
+        return ""
+    text = str(value).strip()
+    if not text or text.lower() in ("none", "nan"):
+        return ""
+    if text.endswith("+00:00"):
+        text = f"{text[:-6]}Z"
+    if "T" in text:
+        date_part, time_part = text.split("T", 1)
+        time_part = time_part.replace("Z", "").split("+")[0].split(".")[0]
+        return f"{date_part} {time_part} UTC"
+    return text
+
+
 def profiles_to_editor_rows(profiles: list[dict[str, Any]]) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     for profile in profiles:
+        client_id = profile.get("client_id")
         rows.append(
             {
                 "id": profile.get("id") or "",
                 "email": profile.get("email") or "",
                 "role": profile.get("role") or "client",
-                "client_id": profile.get("client_id") or "",
+                "client_id": "" if client_id is None else str(client_id),
                 "created_at": profile.get("created_at") or "",
+                "last_sign_in_at": format_last_sign_in(profile.get("last_sign_in_at")),
             }
         )
     return rows
 
 
 def fetch_profiles(supabase: Any) -> list[dict[str, Any]]:
+    try:
+        response = supabase.rpc("fetch_profiles_for_admin").execute()
+        if response.data is not None:
+            return response.data
+    except Exception:
+        pass
+
     response = (
         supabase.table("profiles")
         .select("id, email, role, client_id, created_at")

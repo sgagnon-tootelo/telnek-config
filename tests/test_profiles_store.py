@@ -4,6 +4,7 @@ import pytest
 
 from profiles_store import (
     fetch_profiles,
+    format_last_sign_in,
     normalize_profile_row,
     profiles_to_editor_rows,
     save_profiles,
@@ -51,6 +52,13 @@ def test_normalize_profile_row_client_unknown_client() -> None:
         )
 
 
+def test_format_last_sign_in() -> None:
+    assert format_last_sign_in(None) == ""
+    assert format_last_sign_in("2026-06-12T20:39:34.199915+00:00") == (
+        "2026-06-12 20:39:34 UTC"
+    )
+
+
 def test_profiles_to_editor_rows() -> None:
     rows = profiles_to_editor_rows(
         [
@@ -60,11 +68,20 @@ def test_profiles_to_editor_rows() -> None:
                 "role": "client",
                 "client_id": "telnekdev",
                 "created_at": "2026-01-01T00:00:00Z",
+                "last_sign_in_at": "2026-06-20T15:30:00+00:00",
             }
         ]
     )
     assert rows[0]["email"] == "a@b.com"
     assert rows[0]["client_id"] == "telnekdev"
+    assert rows[0]["last_sign_in_at"] == "2026-06-20 15:30:00 UTC"
+
+
+def test_profiles_to_editor_rows_null_client_id() -> None:
+    rows = profiles_to_editor_rows(
+        [{"id": "x", "email": "a@b.com", "role": "admin", "client_id": None}]
+    )
+    assert rows[0]["client_id"] == ""
 
 
 class _FakeQuery:
@@ -124,9 +141,25 @@ class _FakeQuery:
         return type("R", (), {"data": []})()
 
 
+class _FakeRpc:
+    def __init__(self, data: list[dict] | None, *, fail: bool = False):
+        self._data = data
+        self._fail = fail
+
+    def execute(self):
+        if self._fail:
+            raise RuntimeError("rpc unavailable")
+        return type("R", (), {"data": self._data})()
+
+
 class _FakeSupabase:
-    def __init__(self, profiles: list[dict]):
+    def __init__(self, profiles: list[dict], *, rpc_data: list[dict] | None = None, rpc_fail: bool = False):
         self._store = {"profiles": profiles}
+        self._rpc_data = rpc_data
+        self._rpc_fail = rpc_fail
+
+    def rpc(self, _name: str):
+        return _FakeRpc(self._rpc_data, fail=self._rpc_fail)
 
     def table(self, name: str):
         return _FakeQuery(name, self._store)
@@ -135,6 +168,33 @@ class _FakeSupabase:
 def test_fetch_profiles_returns_rows() -> None:
     client = _FakeSupabase(
         [{"id": "1", "email": "a@b.com", "role": "admin", "client_id": None}]
+    )
+    rows = fetch_profiles(client)
+    assert len(rows) == 1
+
+
+def test_fetch_profiles_prefers_rpc_with_last_sign_in() -> None:
+    client = _FakeSupabase(
+        [],
+        rpc_data=[
+            {
+                "id": "1",
+                "email": "a@b.com",
+                "role": "admin",
+                "client_id": None,
+                "created_at": "2026-01-01T00:00:00Z",
+                "last_sign_in_at": "2026-06-20T10:00:00+00:00",
+            }
+        ],
+    )
+    rows = fetch_profiles(client)
+    assert rows[0]["last_sign_in_at"] == "2026-06-20T10:00:00+00:00"
+
+
+def test_fetch_profiles_falls_back_when_rpc_missing() -> None:
+    client = _FakeSupabase(
+        [{"id": "1", "email": "a@b.com", "role": "admin", "client_id": None}],
+        rpc_fail=True,
     )
     rows = fetch_profiles(client)
     assert len(rows) == 1

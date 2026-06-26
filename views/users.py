@@ -10,7 +10,14 @@ import streamlit as st
 from app_context import AppContext
 from profiles_store import fetch_profiles, profiles_to_editor_rows, save_profiles
 
-EDITOR_COLUMNS = ["id", "email", "role", "client_id", "created_at"]
+EDITOR_COLUMNS = [
+    "id",
+    "email",
+    "role",
+    "client_id",
+    "created_at",
+    "last_sign_in_at",
+]
 
 
 def _editor_column_config(t, *, client_ids: list[str]) -> dict[str, Any]:
@@ -41,6 +48,12 @@ def _editor_column_config(t, *, client_ids: list[str]) -> dict[str, Any]:
             t("users_col_created"),
             disabled=True,
             width="medium",
+        ),
+        "last_sign_in_at": st.column_config.TextColumn(
+            t("users_col_last_login"),
+            disabled=True,
+            width="medium",
+            help=t("users_col_last_login_help"),
         ),
     }
 
