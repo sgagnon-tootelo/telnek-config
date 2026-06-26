@@ -34,6 +34,7 @@ from ui.nav import (
     nav_pages_for_role,
 )
 from ui.session_panel import render_password_change_form
+from ui.sidebar_state import normalize_client_selector
 from ui.theme import inject_brand_css
 
 
@@ -71,6 +72,7 @@ def render_app_header() -> None:
 
 
 def render_login_page() -> None:
+    normalize_ui_lang(st.session_state)
     top_left, top_right = st.columns([3, 1])
     with top_right:
         st.selectbox(
@@ -298,13 +300,11 @@ with st.sidebar:
     st.markdown(f"### {_t('client_section')}")
 
     if is_admin:
-        prev_value = st.session_state.get("main_client_selector")
-        default_index = client_ids.index(prev_value) if prev_value in client_ids else 0
+        normalize_client_selector(st.session_state, client_ids)
         selected_client_id = st.selectbox(
             _t("select_client"),
             options=client_ids,
             key="main_client_selector",
-            index=default_index,
             label_visibility="collapsed",
         )
     else:
