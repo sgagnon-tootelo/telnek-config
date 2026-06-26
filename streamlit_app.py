@@ -33,7 +33,6 @@ from ui.nav import (
     nav_page_label,
     nav_pages_for_role,
 )
-from ui.session_panel import render_password_change_form
 from ui.theme import inject_brand_css
 
 _LEGACY_SIDEBAR_KEYS = (
@@ -364,11 +363,6 @@ with st.sidebar:
     st.markdown(f"{_t('role')} : {role_emoji} **{role}**")
     if st.session_state.get("user_client_id"):
         st.caption(f"{_t('restricted_client')} : `{st.session_state['user_client_id']}`")
-    render_password_change_form(
-        supabase=supabase,
-        t_fn=_t,
-        user_email=st.session_state.get("user_email", ""),
-    )
     st.divider()
     if st.button(_t("logout"), type="secondary", use_container_width=True):
         logout_user()

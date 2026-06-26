@@ -53,19 +53,6 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "role": "Rôle",
         "restricted_client": "Client restreint",
         "logout": "🚪 Se déconnecter",
-        "password_change_title": "🔒 Changer le mot de passe",
-        "password_current": "Mot de passe actuel",
-        "password_new": "Nouveau mot de passe",
-        "password_confirm": "Confirmer le nouveau mot de passe",
-        "password_change_submit": "Mettre à jour le mot de passe",
-        "password_change_ok": "✅ Mot de passe mis à jour.",
-        "password_change_dev_unavailable": "Changement de mot de passe indisponible en mode développement.",
-        "password_current_required": "Entrez votre mot de passe actuel.",
-        "password_too_short": "Le nouveau mot de passe doit contenir au moins 8 caractères.",
-        "password_mismatch": "La confirmation ne correspond pas au nouveau mot de passe.",
-        "password_same_as_current": "Le nouveau mot de passe doit être différent de l'actuel.",
-        "password_current_invalid": "Mot de passe actuel incorrect.",
-        "password_update_failed": "Impossible de mettre à jour le mot de passe : {error}",
         "nav_section": "Navigation",
         "client_section": "Client",
         "select_client": "Sélectionnez un client",
@@ -377,19 +364,6 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "role": "Role",
         "restricted_client": "Restricted client",
         "logout": "🚪 Sign out",
-        "password_change_title": "🔒 Change password",
-        "password_current": "Current password",
-        "password_new": "New password",
-        "password_confirm": "Confirm new password",
-        "password_change_submit": "Update password",
-        "password_change_ok": "✅ Password updated.",
-        "password_change_dev_unavailable": "Password change is unavailable in development mode.",
-        "password_current_required": "Enter your current password.",
-        "password_too_short": "The new password must be at least 8 characters.",
-        "password_mismatch": "Confirmation does not match the new password.",
-        "password_same_as_current": "The new password must differ from the current one.",
-        "password_current_invalid": "Current password is incorrect.",
-        "password_update_failed": "Could not update password: {error}",
         "nav_section": "Navigation",
         "client_section": "Client",
         "select_client": "Select a client",
@@ -689,16 +663,9 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
 }
 
 
-def normalize_ui_lang(session_state) -> str:
-    lang = session_state.get("ui_lang", "fr")
-    if lang not in TRANSLATIONS:
-        lang = "fr"
-        session_state.ui_lang = lang
-    return lang
-
-
 def get_ui_lang(session_state) -> str:
-    return normalize_ui_lang(session_state)
+    lang = session_state.get("ui_lang", "fr")
+    return lang if lang in TRANSLATIONS else "fr"
 
 
 def t(key: str, session_state, **kwargs) -> str:

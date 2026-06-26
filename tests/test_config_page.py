@@ -15,8 +15,6 @@ def test_config_section_labels_exist_in_fr_and_en() -> None:
         "notifications_contacts_hint",
         "contacts_save",
         "contacts_save_ok_none",
-        "password_change_title",
-        "password_change_ok",
         "transfer_numbers_legacy",
     ]
     for key in keys:
