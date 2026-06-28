@@ -112,8 +112,9 @@ def _save_client_config(
         "call_transcription_flag": call_transcription_flag,
         "confirmation_required": confirmation_required,
         "hangup_message_flag": hangup_message_flag,
-        "telnek_demo_enabled": telnek_demo_enabled,
     }
+    if ctx.is_admin:
+        updated_data["telnek_demo_enabled"] = telnek_demo_enabled
     ctx.update_client(ctx.selected_client_id, updated_data)
     st.success(t("save_ok"))
     st.rerun()
