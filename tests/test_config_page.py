@@ -16,6 +16,8 @@ def test_config_section_labels_exist_in_fr_and_en() -> None:
         "contacts_save",
         "contacts_save_ok_none",
         "transfer_numbers_legacy",
+        "toggle_telnek_demo",
+        "toggle_telnek_demo_help",
     ]
     for key in keys:
         assert key in TRANSLATIONS["fr"]

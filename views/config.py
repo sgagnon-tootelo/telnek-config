@@ -58,6 +58,7 @@ def _save_client_config(
     call_transcription_flag: bool,
     confirmation_required: bool,
     hangup_message_flag: bool,
+    telnek_demo_enabled: bool,
 ) -> None:
     t = ctx.t_fn
     client = ctx.client
@@ -111,6 +112,7 @@ def _save_client_config(
         "call_transcription_flag": call_transcription_flag,
         "confirmation_required": confirmation_required,
         "hangup_message_flag": hangup_message_flag,
+        "telnek_demo_enabled": telnek_demo_enabled,
     }
     ctx.update_client(ctx.selected_client_id, updated_data)
     st.success(t("save_ok"))
@@ -369,6 +371,11 @@ def render_config_page(ctx: AppContext) -> None:
                 t("toggle_hangup_sms"),
                 value=client.get("hangup_message_flag", False),
             )
+            telnek_demo_enabled = st.toggle(
+                t("toggle_telnek_demo"),
+                value=client.get("telnek_demo_enabled", False),
+                help=t("toggle_telnek_demo_help"),
+            )
 
     with st.expander(t("config_section_google"), expanded=False):
         fresh_client = next(
@@ -429,5 +436,6 @@ def render_config_page(ctx: AppContext) -> None:
             call_transcription_flag=call_transcription_flag,
             confirmation_required=confirmation_required,
             hangup_message_flag=hangup_message_flag,
+            telnek_demo_enabled=telnek_demo_enabled,
         )
     st.markdown("</div>", unsafe_allow_html=True)
