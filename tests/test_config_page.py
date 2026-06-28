@@ -8,6 +8,7 @@ def test_config_section_labels_exist_in_fr_and_en() -> None:
         "config_section_agent",
         "config_section_transfer",
         "config_section_options",
+        "config_section_telnek_demo",
         "config_section_google",
         "contacts_section_title",
         "contacts_section_title_none",

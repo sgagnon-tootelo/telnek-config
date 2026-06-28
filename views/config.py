@@ -308,6 +308,15 @@ def render_config_page(ctx: AppContext) -> None:
             voice_value = selected_voice["value"]
             grok_custom_voice_id = ""
 
+    telnek_demo_enabled = bool(client.get("telnek_demo_enabled", False))
+    if ctx.is_admin:
+        with st.expander(t("config_section_telnek_demo"), expanded=True):
+            st.caption(t("toggle_telnek_demo_help"))
+            telnek_demo_enabled = st.toggle(
+                t("toggle_telnek_demo"),
+                value=telnek_demo_enabled,
+            )
+
     with st.expander(t("config_section_transfer"), expanded=False):
         transfer_mode_options = [
             {"value": "blind", "label": t("transfer_blind")},
@@ -370,11 +379,6 @@ def render_config_page(ctx: AppContext) -> None:
             hangup_message_flag = st.toggle(
                 t("toggle_hangup_sms"),
                 value=client.get("hangup_message_flag", False),
-            )
-            telnek_demo_enabled = st.toggle(
-                t("toggle_telnek_demo"),
-                value=client.get("telnek_demo_enabled", False),
-                help=t("toggle_telnek_demo_help"),
             )
 
     with st.expander(t("config_section_google"), expanded=False):
