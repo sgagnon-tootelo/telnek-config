@@ -14,6 +14,7 @@ def test_editor_columns_for_none_mode_hides_transfer_fields() -> None:
     assert "notify_transfer_fail" not in columns
     assert "notify_message" in columns
     assert "notify_rdv" in columns
+    assert "email_enabled" in columns
     assert "phone_e164" in columns
 
 

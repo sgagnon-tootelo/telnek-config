@@ -45,6 +45,7 @@ def _save_client_config(
     opening_hour: int,
     closing_hour: int,
     admin_phones_edited: str,
+    admin_emails_edited: str,
     instructions_specific: str,
     base_url: str,
     url_map_edited: str,
@@ -88,6 +89,9 @@ def _save_client_config(
     admin_phones_list = [
         num.strip() for num in admin_phones_edited.splitlines() if num.strip()
     ]
+    admin_emails_list = [
+        addr.strip() for addr in admin_emails_edited.splitlines() if addr.strip()
+    ]
 
     updated_data = {
         "primary_language": primary_language_selected,
@@ -98,6 +102,7 @@ def _save_client_config(
         "opening_hour": opening_hour,
         "closing_hour": closing_hour,
         "admin_phones": admin_phones_list,
+        "admin_emails": admin_emails_list,
         "instructions_specific": instructions_specific,
         "base_url": base_url,
         "url_map": url_map_parsed,
@@ -198,6 +203,22 @@ def render_config_page(ctx: AppContext) -> None:
             value=current_phones,
             height=120,
             help="Exemple :\n+15149474976\n+15145551234",
+        )
+        st.caption(t("email_caption"))
+        admin_emails_raw = client.get("admin_emails")
+        if isinstance(admin_emails_raw, list):
+            current_emails = "\n".join(
+                str(e).strip() for e in admin_emails_raw if str(e).strip()
+            )
+        elif isinstance(admin_emails_raw, str) and admin_emails_raw.strip():
+            current_emails = admin_emails_raw
+        else:
+            current_emails = ""
+        admin_emails_edited = st.text_area(
+            t("admin_emails"),
+            value=current_emails,
+            height=100,
+            help="Exemple :\nadmin@example.com\ncompta@example.com",
         )
         st.text_input(
             t("virtual_number"),
@@ -428,6 +449,7 @@ def render_config_page(ctx: AppContext) -> None:
             opening_hour=opening_hour,
             closing_hour=closing_hour,
             admin_phones_edited=admin_phones_edited,
+            admin_emails_edited=admin_emails_edited,
             instructions_specific=instructions_specific,
             base_url=base_url,
             url_map_edited=url_map_edited,

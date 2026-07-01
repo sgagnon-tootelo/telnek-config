@@ -22,6 +22,7 @@ EDITOR_COLUMNS = [
     "contact_type",
     "phone_e164",
     "email",
+    "email_enabled",
     "can_transfer",
     "notify_message",
     "notify_rdv",
@@ -77,7 +78,16 @@ def _editor_column_config(t, *, transfer_mode: str) -> dict[str, Any]:
             help=t("contacts_col_phone_help"),
             width="medium",
         ),
-        "email": st.column_config.TextColumn(t("contacts_col_email"), width="medium"),
+        "email": st.column_config.TextColumn(
+            t("contacts_col_email"),
+            help=t("contacts_col_email_help"),
+            width="medium",
+        ),
+        "email_enabled": st.column_config.CheckboxColumn(
+            t("contacts_col_email_enabled"),
+            default=False,
+            help=t("contacts_col_email_enabled_help"),
+        ),
         "can_transfer": st.column_config.CheckboxColumn(
             t("contacts_col_can_transfer"),
             default=True,
@@ -192,6 +202,8 @@ def render_contacts_editor(ctx: AppContext, *, transfer_mode: str) -> None:
                 st.error(t("contacts_error_phone_required"))
             elif code == "phone_required_for_notify":
                 st.error(t("contacts_error_phone_notify"))
+            elif code == "email_required_for_notify":
+                st.error(t("contacts_error_email_notify"))
             else:
                 st.error(t("contacts_error_generic", error=code))
         except Exception as exc:

@@ -95,10 +95,14 @@ def normalize_contact_row(row: dict[str, Any], *, used_slugs: set[str] | None = 
     notify_rdv = _clean_bool(row.get("notify_rdv"), default=False)
     notify_transfer_fail = _clean_bool(row.get("notify_transfer_fail"), default=True)
     phone = _clean_str(row.get("phone_e164")) or None
+    email = _clean_str(row.get("email")) or None
+    email_enabled = _clean_bool(row.get("email_enabled"), default=False)
     if can_transfer and not phone:
         raise ValueError("phone_required_for_transfer")
     if (notify_message or notify_rdv or notify_transfer_fail) and not phone:
         raise ValueError("phone_required_for_notify")
+    if email_enabled and not email:
+        raise ValueError("email_required_for_notify")
 
     return {
         "id": _clean_str(row.get("id")) or None,
@@ -107,9 +111,9 @@ def normalize_contact_row(row: dict[str, Any], *, used_slugs: set[str] | None = 
         "contact_type": contact_type,
         "phone_e164": phone,
         "phone_ext": _clean_str(row.get("phone_ext")) or None,
-        "email": _clean_str(row.get("email")) or None,
+        "email": email,
         "sms_enabled": _clean_bool(row.get("sms_enabled"), default=True),
-        "email_enabled": _clean_bool(row.get("email_enabled"), default=False),
+        "email_enabled": email_enabled,
         "can_transfer": can_transfer,
         "notify_message": notify_message,
         "notify_rdv": notify_rdv,
@@ -142,6 +146,7 @@ def contacts_to_editor_rows(contacts: list[dict[str, Any]]) -> list[dict[str, An
                 "contact_type": contact.get("contact_type") or "department",
                 "phone_e164": contact.get("phone_e164") or "",
                 "email": contact.get("email") or "",
+                "email_enabled": bool(contact.get("email_enabled", False)),
                 "can_transfer": bool(contact.get("can_transfer", True)),
                 "notify_message": bool(contact.get("notify_message", False)),
                 "notify_rdv": bool(contact.get("notify_rdv", False)),

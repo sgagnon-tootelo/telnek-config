@@ -64,6 +64,38 @@ def test_contacts_to_editor_rows_flattens_keywords() -> None:
     assert rows[0]["display_name"] == "Ventes"
 
 
+def test_contacts_to_editor_rows_includes_email_enabled() -> None:
+    rows = contacts_to_editor_rows(
+        [
+            {
+                "id": "x",
+                "display_name": "Sylvain",
+                "email": "admin@example.com",
+                "email_enabled": True,
+            }
+        ]
+    )
+    assert rows[0]["email"] == "admin@example.com"
+    assert rows[0]["email_enabled"] is True
+
+
+def test_normalize_contact_row_requires_email_when_email_enabled() -> None:
+    try:
+        normalize_contact_row(
+            {
+                "display_name": "Sylvain",
+                "can_transfer": False,
+                "notify_transfer_fail": False,
+                "email_enabled": True,
+            }
+        )
+        raised = False
+    except ValueError as exc:
+        raised = True
+        assert str(exc) == "email_required_for_notify"
+    assert raised
+
+
 class _FakeQuery:
     def __init__(self, table: str, store: dict):
         self._table = table
