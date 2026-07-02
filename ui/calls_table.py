@@ -365,7 +365,7 @@ def render_call_detail_panel(
     )
     st.markdown(f"**{t_fn('detail')}** : {call_detail_text(row)}")
 
-    if render_metrics is not None and is_admin:
+    if render_metrics is not None:
         render_metrics(row, is_admin=is_admin)
 
     if render_recording is not None:

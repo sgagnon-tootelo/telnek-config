@@ -2,12 +2,15 @@ import pandas as pd
 
 from call_metrics import (
     aggregate_call_metrics,
+    appointment_count,
     enrich_calls_dataframe,
     has_latency_metrics,
     latency_e2e_avg,
     latency_playback_avg,
     latency_primary_avg,
     latency_user_turns,
+    notification_email_count,
+    notification_sms_count,
 )
 
 
@@ -64,6 +67,25 @@ def test_enrich_calls_dataframe_adds_columns() -> None:
     assert bool(enriched["_has_latency"].iloc[0]) is True
     assert enriched["_estimated_cost_usd"].iloc[0] == 0.0805
     assert enriched["_pricing_mode"].iloc[0] == "elevenlabs_hybrid"
+
+
+def test_notification_counts_from_cost_breakdown() -> None:
+    breakdown = {
+        "notifications": {"sms_count": 3, "email_count": 2},
+        "breakdown": {"twilio_sms": {"usd": 0.0225, "count": 3}},
+    }
+    assert notification_sms_count(breakdown) == 3
+    assert notification_email_count(breakdown) == 2
+
+    legacy = {"breakdown": {"twilio_sms": {"usd": 0.015, "count": 2}}}
+    assert notification_sms_count(legacy) == 2
+    assert notification_email_count(legacy) is None
+
+
+def test_appointment_count_from_row() -> None:
+    assert appointment_count({"appointment_booked": True}) == 1
+    assert appointment_count({"appointment_booked": False}) == 0
+    assert appointment_count({}) == 0
 
 
 def test_aggregate_call_metrics_counts_playback_only_calls() -> None:

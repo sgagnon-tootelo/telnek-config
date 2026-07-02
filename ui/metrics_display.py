@@ -8,6 +8,7 @@ import streamlit as st
 
 from call_metrics import (
     aggregate_call_metrics,
+    appointment_count,
     breakdown_line_items,
     enrich_calls_dataframe,
     has_latency_metrics,
@@ -16,6 +17,8 @@ from call_metrics import (
     latency_playback_avg,
     latency_transcription_avg,
     latency_user_turns,
+    notification_email_count,
+    notification_sms_count,
     pricing_mode,
     cost_per_second,
     cost_usd,
@@ -236,7 +239,27 @@ def render_call_recording(row: pd.Series, *, t_fn) -> None:
         st.info(t_fn("no_recording"))
 
 
+def _format_notification_count(value: int | None) -> str | int:
+    return value if value is not None else "—"
+
+
+def render_call_notifications_detail(row: pd.Series, *, t_fn) -> None:
+    sms = notification_sms_count(row.get("cost_breakdown"))
+    emails = notification_email_count(row.get("cost_breakdown"))
+    appointments = appointment_count(row)
+
+    st.subheader(t_fn("notifications_section"))
+    col_n1, col_n2, col_n3 = st.columns(3)
+    with col_n1:
+        st.metric(t_fn("metric_sms_sent"), _format_notification_count(sms))
+    with col_n2:
+        st.metric(t_fn("metric_emails_sent"), _format_notification_count(emails))
+    with col_n3:
+        st.metric(t_fn("metric_appointments_booked"), appointments)
+
+
 def render_call_metrics_detail(row: pd.Series, *, t_fn, is_admin: bool) -> None:
+    render_call_notifications_detail(row, t_fn=t_fn)
     if not is_admin:
         return
     latency_raw = row.get("latency_metrics")
@@ -298,6 +321,7 @@ __all__ = [
     "add_latency_cost_display_columns",
     "aggregate_call_metrics",
     "latency_cost_column_keys",
+    "render_call_notifications_detail",
     "render_call_metrics_detail",
     "render_call_recording",
     "render_client_stats_kpis",

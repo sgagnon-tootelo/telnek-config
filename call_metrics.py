@@ -144,6 +144,62 @@ def cost_per_second(breakdown: Any) -> float | None:
         return None
 
 
+def _notifications_block(breakdown: Any) -> dict[str, Any]:
+    parsed = _parse_json(breakdown)
+    if not parsed:
+        return {}
+    notifications = parsed.get("notifications")
+    return notifications if isinstance(notifications, dict) else {}
+
+
+def notification_sms_count(breakdown: Any) -> int | None:
+    notifications = _notifications_block(breakdown)
+    if "sms_count" in notifications:
+        try:
+            return int(notifications["sms_count"])
+        except (TypeError, ValueError):
+            return None
+
+    parsed = _parse_json(breakdown)
+    if not parsed:
+        return None
+    items = parsed.get("breakdown")
+    if not isinstance(items, dict):
+        return None
+    sms = items.get("twilio_sms")
+    if isinstance(sms, dict) and sms.get("count") is not None:
+        try:
+            return int(sms["count"])
+        except (TypeError, ValueError):
+            return None
+    return None
+
+
+def notification_email_count(breakdown: Any) -> int | None:
+    notifications = _notifications_block(breakdown)
+    if "email_count" not in notifications:
+        return None
+    try:
+        return int(notifications["email_count"])
+    except (TypeError, ValueError):
+        return None
+
+
+def appointment_count(row: Any) -> int:
+    if row is None:
+        return 0
+    value = row.get("appointment_booked") if hasattr(row, "get") else None
+    if value is None:
+        return 0
+    if isinstance(value, bool):
+        return 1 if value else 0
+    if isinstance(value, (int, float)) and not pd.isna(value):
+        return 1 if int(value) else 0
+    if isinstance(value, str):
+        return 1 if value.strip().lower() in {"1", "true", "t", "yes"} else 0
+    return 0
+
+
 def breakdown_line_items(breakdown: Any) -> list[dict[str, Any]]:
     parsed = _parse_json(breakdown)
     if not parsed:
