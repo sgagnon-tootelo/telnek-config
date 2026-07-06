@@ -40,6 +40,14 @@ def _clean_bool(value: Any, default: bool = False) -> bool:
     return default
 
 
+def normalize_phone_extension(value: Any) -> str | None:
+    raw = _clean_str(value)
+    if not raw:
+        return None
+    digits = "".join(c for c in raw if c.isdigit())
+    return digits or None
+
+
 def _clean_int(value: Any, default: int = 100) -> int:
     if value is None or str(value).strip().lower() in ("", "none", "nan"):
         return default
@@ -110,7 +118,7 @@ def normalize_contact_row(row: dict[str, Any], *, used_slugs: set[str] | None = 
         "slug": slug,
         "contact_type": contact_type,
         "phone_e164": phone,
-        "phone_ext": _clean_str(row.get("phone_ext")) or None,
+        "phone_ext": normalize_phone_extension(row.get("phone_ext")),
         "email": email,
         "sms_enabled": _clean_bool(row.get("sms_enabled"), default=True),
         "email_enabled": email_enabled,
@@ -145,6 +153,7 @@ def contacts_to_editor_rows(contacts: list[dict[str, Any]]) -> list[dict[str, An
                 "slug": contact.get("slug") or "",
                 "contact_type": contact.get("contact_type") or "department",
                 "phone_e164": contact.get("phone_e164") or "",
+                "phone_ext": contact.get("phone_ext") or "",
                 "email": contact.get("email") or "",
                 "email_enabled": bool(contact.get("email_enabled", False)),
                 "can_transfer": bool(contact.get("can_transfer", True)),

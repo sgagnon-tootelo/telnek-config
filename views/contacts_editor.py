@@ -21,6 +21,7 @@ EDITOR_COLUMNS = [
     "slug",
     "contact_type",
     "phone_e164",
+    "phone_ext",
     "email",
     "email_enabled",
     "can_transfer",
@@ -32,7 +33,9 @@ EDITOR_COLUMNS = [
     "active",
 ]
 
-TRANSFER_ONLY_COLUMNS = frozenset({"slug", "keywords", "can_transfer", "notify_transfer_fail"})
+TRANSFER_ONLY_COLUMNS = frozenset(
+    {"slug", "keywords", "can_transfer", "notify_transfer_fail", "phone_ext"}
+)
 
 
 def editor_columns_for_mode(transfer_mode: str) -> list[str]:
@@ -77,6 +80,12 @@ def _editor_column_config(t, *, transfer_mode: str) -> dict[str, Any]:
             t("contacts_col_phone"),
             help=t("contacts_col_phone_help"),
             width="medium",
+        ),
+        "phone_ext": st.column_config.TextColumn(
+            t("contacts_col_phone_ext"),
+            help=t("contacts_col_phone_ext_help"),
+            width="small",
+            disabled=transfer_mode == "none",
         ),
         "email": st.column_config.TextColumn(
             t("contacts_col_email"),

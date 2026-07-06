@@ -5,6 +5,7 @@ from client_contacts_store import (
     contacts_to_editor_rows,
     ensure_unique_slug,
     normalize_contact_row,
+    normalize_phone_extension,
     parse_keywords,
     save_client_contacts,
     slugify,
@@ -62,6 +63,18 @@ def test_contacts_to_editor_rows_flattens_keywords() -> None:
     )
     assert rows[0]["keywords"] == "a, b"
     assert rows[0]["display_name"] == "Ventes"
+
+
+def test_normalize_phone_extension_strips_label() -> None:
+    assert normalize_phone_extension("poste 201") == "201"
+    assert normalize_phone_extension("") is None
+
+
+def test_contacts_to_editor_rows_includes_phone_ext() -> None:
+    rows = contacts_to_editor_rows(
+        [{"id": "x", "display_name": "Sylvain", "phone_e164": "+15149474976", "phone_ext": "201"}]
+    )
+    assert rows[0]["phone_ext"] == "201"
 
 
 def test_contacts_to_editor_rows_includes_email_enabled() -> None:
