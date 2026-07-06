@@ -1,5 +1,7 @@
 """Tests for contacts editor helpers."""
 
+from pathlib import Path
+
 from views.contacts_editor import (
     count_notification_contacts,
     editor_columns_for_mode,
@@ -23,6 +25,13 @@ def test_editor_columns_for_blind_mode_includes_transfer_fields() -> None:
     assert "slug" in columns
     assert "can_transfer" in columns
     assert "notify_message" in columns
+
+
+def test_contacts_editor_allows_client_editing() -> None:
+    source = Path("views/contacts_editor.py").read_text(encoding="utf-8")
+    assert "st.data_editor" in source
+    assert "contacts_readonly_hint" not in source
+    assert "if not ctx.is_admin" not in source
 
 
 def test_count_notification_contacts() -> None:

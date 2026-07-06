@@ -147,21 +147,8 @@ def render_contacts_editor(ctx: AppContext, *, transfer_mode: str) -> None:
     st.markdown(f"**{section_title}**")
     st.caption(section_caption)
 
-    if df.empty and not ctx.is_admin:
-        st.info(t("contacts_empty_readonly"))
-        return
-
-    if not ctx.is_admin:
-        if df.empty:
-            st.info(t("contacts_empty_readonly"))
-            return
-        st.dataframe(
-            df[visible_columns].drop(columns=["id"], errors="ignore"),
-            use_container_width=True,
-            hide_index=True,
-        )
-        st.caption(t("contacts_readonly_hint"))
-        return
+    if df.empty:
+        st.info(t("contacts_empty_editable"))
 
     column_config = _editor_column_config(t, transfer_mode=transfer_mode)
     edited_df = st.data_editor(
