@@ -87,16 +87,33 @@ def has_recording(row: pd.Series | dict) -> bool:
     )
 
 
-def call_detail_text(row: pd.Series | dict) -> str:
+def _transfer_phone_ext_digits(row: pd.Series | dict) -> str | None:
+    raw = row.get("transfer_phone_ext")
+    if raw is None or (isinstance(raw, float) and pd.isna(raw)):
+        return None
+    digits = "".join(c for c in str(raw).strip() if c.isdigit())
+    return digits or None
+
+
+def call_detail_text(
+    row: pd.Series | dict,
+    t_fn: TranslateFn | None = None,
+) -> str:
     if row.get("message_taken"):
         reason = str(row.get("message_reason") or "")
         return reason[:70] + "..." if len(reason) > 70 else reason or "—"
     if row.get("transfer_success"):
-        dept = str(row.get("transfer_department") or "")
-        number = str(row.get("transfer_to_number") or "")
-        if dept and number:
-            return f"{dept} ({number})"
-        return dept or number or "—"
+        dept = str(row.get("transfer_department") or "").strip()
+        number = str(row.get("transfer_to_number") or "").strip()
+        ext = _transfer_phone_ext_digits(row)
+        if number and ext:
+            ext_label = t_fn("transfer_ext_label") if t_fn else "poste"
+            phone_part = f"{number}, {ext_label} {ext}"
+        else:
+            phone_part = number
+        if dept and phone_part:
+            return f"{dept} ({phone_part})"
+        return dept or phone_part or "—"
     return "—"
 
 
@@ -130,7 +147,10 @@ def prepare_calls_table_dataframe(
         lambda row: status_badge_label(row.get("status"), t_fn),
         axis=1,
     )
-    enriched["_detail"] = enriched.apply(call_detail_text, axis=1)
+    enriched["_detail"] = enriched.apply(
+        lambda row: call_detail_text(row, t_fn=t_fn),
+        axis=1,
+    )
     enriched["_has_audio"] = enriched.apply(has_recording, axis=1)
     enriched["_audio_label"] = enriched["_has_audio"].map(
         lambda yes: t_fn("audio_available") if yes else ""
@@ -363,7 +383,7 @@ def render_call_detail_panel(
     st.markdown(
         f"**{t_fn('appointment_status')}** : {row.get('statut_rdv', '—')}"
     )
-    st.markdown(f"**{t_fn('detail')}** : {call_detail_text(row)}")
+    st.markdown(f"**{t_fn('detail')}** : {call_detail_text(row, t_fn=t_fn)}")
 
     if render_metrics is not None:
         render_metrics(row, is_admin=is_admin)

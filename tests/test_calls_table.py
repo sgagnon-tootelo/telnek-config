@@ -9,6 +9,7 @@ from ui.calls_table import (
     ISSUE_MESSAGE,
     ISSUE_TRANSFER,
     build_calls_display_dataframe,
+    call_detail_text,
     call_issue_type,
     prepare_calls_table_dataframe,
     filter_calls_dataframe,
@@ -35,6 +36,7 @@ def _t(key: str, **kwargs) -> str:
         "col_status": "Statut",
         "result_action": "Résultat",
         "detail": "Détail",
+        "transfer_ext_label": "poste",
         "col_appointment_start": "RDV prévu",
         "col_appointment_name": "Nom RDV",
         "col_appointment_status": "Conf. RDV",
@@ -45,6 +47,26 @@ def _t(key: str, **kwargs) -> str:
     if key in labels:
         return labels[key]
     return key
+
+
+def test_call_detail_text_includes_transfer_phone_ext() -> None:
+    row = {
+        "transfer_success": True,
+        "transfer_department": "Ventes",
+        "transfer_to_number": "+15149474976",
+        "transfer_phone_ext": "201",
+    }
+    assert call_detail_text(row, t_fn=_t) == "Ventes (+15149474976, poste 201)"
+
+
+def test_call_detail_text_transfer_without_ext() -> None:
+    row = {
+        "transfer_success": True,
+        "transfer_department": "Ventes",
+        "transfer_to_number": "+15149474976",
+        "transfer_phone_ext": None,
+    }
+    assert call_detail_text(row, t_fn=_t) == "Ventes (+15149474976)"
 
 
 def test_call_issue_type_prioritizes_appointment() -> None:
@@ -107,6 +129,7 @@ def test_build_calls_display_dataframe_uses_translated_headers() -> None:
                     "appointment_booked": False,
                     "message_taken": False,
                     "transfer_success": False,
+                    "statut_rdv": "—",
                     "duration_formatted": "2m 10s",
                     "transcript": "Bonjour",
                 }
