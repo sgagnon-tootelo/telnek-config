@@ -19,6 +19,13 @@ from i18n import (
 from app_context import AppContext
 from client_contacts_store import build_transfer_numbers, fetch_client_contacts
 from views.contacts_editor import render_contacts_editor
+from weekly_hours import (
+    DayHours,
+    format_company_hours,
+    invalid_day_indexes,
+    legacy_opening_closing,
+    week_from_client,
+)
 
 
 def _safe_json_loads(data):
@@ -32,6 +39,77 @@ def _safe_json_loads(data):
 
 def _safe_json_dumps(data):
     return json.dumps(_safe_json_loads(data), indent=4, ensure_ascii=False)
+
+
+def _render_week_hours(client_id: str, rows: list[DayHours], t) -> list[DayHours]:
+    st.caption(t("hours_by_day_caption"))
+    _, _, header_open, header_close = st.columns([1.3, 1, 1.4, 1.4])
+    header_open.caption(t("opening_hour"))
+    header_close.caption(t("closing_hour"))
+    edited: list[DayHours] = []
+    for index, row in enumerate(rows):
+        col_day, col_closed, col_open, col_close = st.columns([1.3, 1, 1.4, 1.4])
+        col_day.markdown(f"**{t(f'weekday_{index}')}**")
+        closed = col_closed.checkbox(
+            t("day_closed"),
+            value=row.closed,
+            key=f"hours_closed_{client_id}_{index}",
+        )
+        open_hour = int(
+            col_open.number_input(
+                t("opening_hour"),
+                min_value=0,
+                max_value=23,
+                value=int(row.open_hour),
+                step=1,
+                key=f"hours_open_{client_id}_{index}",
+                label_visibility="collapsed",
+                disabled=closed,
+            )
+        )
+        close_hour = int(
+            col_close.number_input(
+                t("closing_hour"),
+                min_value=0,
+                max_value=24,
+                value=int(row.close_hour),
+                step=1,
+                key=f"hours_close_{client_id}_{index}",
+                label_visibility="collapsed",
+                disabled=closed,
+            )
+        )
+        open_minute = 0 if open_hour != row.open_hour else row.open_minute
+        close_minute = 0 if close_hour != row.close_hour else row.close_minute
+        edited.append(
+            DayHours(
+                open_hour,
+                open_minute,
+                close_hour,
+                close_minute,
+                closed=closed,
+            )
+        )
+    return edited
+
+
+def _hours_for_save(
+    *,
+    original_hours: str,
+    edited_hours: str,
+    original_week: list[DayHours],
+    edited_week: list[DayHours],
+    language: str,
+) -> tuple[str, int, int] | None:
+    if invalid_day_indexes(edited_week):
+        return None
+    grid_changed = edited_week != original_week
+    if grid_changed:
+        spoken = format_company_hours(edited_week, language)
+    else:
+        spoken = edited_hours if edited_hours != original_hours else original_hours
+    opening_hour, closing_hour = legacy_opening_closing(edited_week)
+    return spoken, opening_hour, closing_hour
 
 
 def _save_client_config(
@@ -166,24 +244,14 @@ def render_config_page(ctx: AppContext) -> None:
         company_address = st.text_input(
             t("company_address"), value=client.get("company_address", "")
         )
-        company_hours = st.text_input(t("company_hours"), value=client.get("company_hours", ""))
-        col_open, col_close = st.columns(2)
-        with col_open:
-            opening_hour = st.number_input(
-                t("opening_hour"),
-                value=client.get("opening_hour", 9),
-                min_value=0,
-                max_value=23,
-                step=1,
-            )
-        with col_close:
-            closing_hour = st.number_input(
-                t("closing_hour"),
-                value=client.get("closing_hour", 17),
-                min_value=0,
-                max_value=24,
-                step=1,
-            )
+        original_hours = client.get("company_hours") or ""
+        company_hours = st.text_input(t("company_hours"), value=original_hours)
+        original_week = week_from_client(
+            original_hours,
+            int(client.get("opening_hour") or 9),
+            int(client.get("closing_hour") or 17),
+        )
+        edited_week = _render_week_hours(client_id, original_week, t)
 
     with st.expander(t("config_section_notifications"), expanded=False):
         st.caption(t("sms_caption"))
@@ -439,6 +507,17 @@ def render_config_page(ctx: AppContext) -> None:
 
     st.markdown('<div class="telnek-config-save-bar">', unsafe_allow_html=True)
     if st.button(t("save_config"), type="primary", use_container_width=True, key=f"save_config_{client_id}"):
+        saved_hours = _hours_for_save(
+            original_hours=original_hours,
+            edited_hours=company_hours,
+            original_week=original_week,
+            edited_week=edited_week,
+            language=primary_language_selected,
+        )
+        if saved_hours is None:
+            st.error(t("hours_day_invalid"))
+            ctx.stop_app()
+        company_hours, opening_hour, closing_hour = saved_hours
         _save_client_config(
             ctx,
             primary_language_selected=primary_language_selected,
