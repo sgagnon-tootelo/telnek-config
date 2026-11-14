@@ -31,6 +31,30 @@ def test_build_transfer_numbers_sorted_by_priority() -> None:
     }
 
 
+def test_normalize_contact_row_keeps_open_hours_flag_only_when_transferable() -> None:
+    flagged = normalize_contact_row(
+        {
+            "display_name": "Comptabilité",
+            "phone_e164": "+15145551234",
+            "can_transfer": True,
+            "transfer_when_open_only": True,
+        }
+    )
+    assert flagged["transfer_when_open_only"] is True
+    cleared = normalize_contact_row(
+        {
+            "display_name": "Réception",
+            "phone_e164": "+15145551234",
+            "can_transfer": False,
+            "notify_message": False,
+            "notify_rdv": False,
+            "notify_transfer_fail": False,
+            "transfer_when_open_only": True,
+        }
+    )
+    assert cleared["transfer_when_open_only"] is False
+
+
 def test_normalize_contact_row_requires_phone_when_transferable() -> None:
     try:
         normalize_contact_row({"display_name": "Ventes", "can_transfer": True})

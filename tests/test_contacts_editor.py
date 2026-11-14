@@ -12,6 +12,7 @@ def test_editor_columns_for_none_mode_hides_transfer_fields() -> None:
     columns = editor_columns_for_mode("none")
     assert "slug" not in columns
     assert "can_transfer" not in columns
+    assert "transfer_when_open_only" not in columns
     assert "keywords" not in columns
     assert "notify_transfer_fail" not in columns
     assert "notify_message" in columns
@@ -24,6 +25,7 @@ def test_editor_columns_for_blind_mode_includes_transfer_fields() -> None:
     columns = editor_columns_for_mode("blind")
     assert "slug" in columns
     assert "can_transfer" in columns
+    assert "transfer_when_open_only" in columns
     assert "phone_ext" in columns
     assert "notify_message" in columns
 

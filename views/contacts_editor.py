@@ -25,6 +25,7 @@ EDITOR_COLUMNS = [
     "email",
     "email_enabled",
     "can_transfer",
+    "transfer_when_open_only",
     "notify_message",
     "notify_rdv",
     "notify_transfer_fail",
@@ -34,7 +35,14 @@ EDITOR_COLUMNS = [
 ]
 
 TRANSFER_ONLY_COLUMNS = frozenset(
-    {"slug", "keywords", "can_transfer", "notify_transfer_fail", "phone_ext"}
+    {
+        "slug",
+        "keywords",
+        "can_transfer",
+        "transfer_when_open_only",
+        "notify_transfer_fail",
+        "phone_ext",
+    }
 )
 
 
@@ -100,6 +108,12 @@ def _editor_column_config(t, *, transfer_mode: str) -> dict[str, Any]:
         "can_transfer": st.column_config.CheckboxColumn(
             t("contacts_col_can_transfer"),
             default=True,
+            disabled=transfer_mode == "none",
+        ),
+        "transfer_when_open_only": st.column_config.CheckboxColumn(
+            t("contacts_col_transfer_when_open"),
+            default=False,
+            help=t("contacts_col_transfer_when_open_help"),
             disabled=transfer_mode == "none",
         ),
         "notify_message": st.column_config.CheckboxColumn(
@@ -178,6 +192,7 @@ def render_contacts_editor(ctx: AppContext, *, transfer_mode: str) -> None:
                 for row in editor_rows:
                     row["can_transfer"] = False
                     row["notify_transfer_fail"] = False
+                    row["transfer_when_open_only"] = False
             transfer_map = save_client_contacts(
                 ctx.supabase,
                 client_id,

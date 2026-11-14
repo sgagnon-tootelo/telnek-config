@@ -102,6 +102,9 @@ def normalize_contact_row(row: dict[str, Any], *, used_slugs: set[str] | None = 
     notify_message = _clean_bool(row.get("notify_message"), default=False)
     notify_rdv = _clean_bool(row.get("notify_rdv"), default=False)
     notify_transfer_fail = _clean_bool(row.get("notify_transfer_fail"), default=True)
+    transfer_when_open_only = _clean_bool(
+        row.get("transfer_when_open_only"), default=False
+    )
     phone = _clean_str(row.get("phone_e164")) or None
     email = _clean_str(row.get("email")) or None
     email_enabled = _clean_bool(row.get("email_enabled"), default=False)
@@ -126,6 +129,7 @@ def normalize_contact_row(row: dict[str, Any], *, used_slugs: set[str] | None = 
         "notify_message": notify_message,
         "notify_rdv": notify_rdv,
         "notify_transfer_fail": notify_transfer_fail,
+        "transfer_when_open_only": transfer_when_open_only and can_transfer,
         "keywords": parse_keywords(row.get("keywords")),
         "priority": _clean_int(row.get("priority"), default=100),
         "active": _clean_bool(row.get("active"), default=True),
@@ -160,6 +164,9 @@ def contacts_to_editor_rows(contacts: list[dict[str, Any]]) -> list[dict[str, An
                 "notify_message": bool(contact.get("notify_message", False)),
                 "notify_rdv": bool(contact.get("notify_rdv", False)),
                 "notify_transfer_fail": bool(contact.get("notify_transfer_fail", True)),
+                "transfer_when_open_only": bool(
+                    contact.get("transfer_when_open_only", False)
+                ),
                 "keywords": keywords_to_display(contact.get("keywords")),
                 "priority": _clean_int(contact.get("priority"), default=100),
                 "active": bool(contact.get("active", True)),
@@ -212,6 +219,7 @@ def save_client_contacts(
             "notify_message": contact["notify_message"],
             "notify_rdv": contact["notify_rdv"],
             "notify_transfer_fail": contact["notify_transfer_fail"],
+            "transfer_when_open_only": contact["transfer_when_open_only"],
             "keywords": contact["keywords"],
             "priority": contact["priority"],
             "active": contact["active"],
